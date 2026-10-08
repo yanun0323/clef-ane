@@ -1,0 +1,159 @@
+# ========================
+# OS
+# ========================
+.DS_Store
+.cache
+
+# ========================
+# Editor
+# ========================
+.vscode
+.vscode-*
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# ========================
+# Logs
+# ========================
+*.log
+
+# ========================
+# Secrets (CRITICAL)
+# ========================
+.env
+.env.*
+*.env
+*.env.*
+# Templates may be committed only with placeholder values.
+!.env.example
+!.env.sample
+!.env.template
+!*.env.example
+!*.env.sample
+!*.env.template
+!*.example.env
+!*.sample.env
+!*.template.env
+/Makefile.env
+/Makefile.local.env
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+/.netrc
+/.pypirc
+/.ssh/
+/.aws/
+/.huggingface/
+/.hf/
+/hf-home/
+/.hf_token
+/hf_token
+/token
+/stored_tokens
+/secrets/
+/credentials/
+/secrets.json
+/credentials.json
+
+# ========================
+# Go
+# ========================
+bin
+dist
+*.test
+*.out
+*.gocache
+
+# ========================
+# Python
+# ========================
+.venv*/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules
+.vite
+.bun-install
+.bun-cache
+.npm-cache
+
+# ========================
+# Temp / Runtime
+# ========================
+.run
+.tmp
+*.pid
+*.pid.lock
+.clef-ane.lock
+.build.lock
+.source.json
+
+# ========================
+# Agent / Local files
+# ========================
+SPEC.md
+TASK.md
+CONTEXT.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.pi/
+.claude/
+.codex/
+.cursor/
+.agents/
+.playwright-cli
+
+# ========================
+# Build artifacts
+# ========================
+*.build
+/build/
+*.egg-info/
+*.egg
+*.whl
+*.o
+*.a
+*.so
+*.dylib
+
+# ========================
+# Clef model downloads and local research outputs
+# Models are distributed through Hugging Face, not Git.
+# ========================
+/data/
+/docs/
+/models/
+/results/
+/hf-meta/
+/sources/
+/vendor/
+/exports/
+/bundles/
+# Large model exports, including ones written outside the directories above.
+*.safetensors
+*.bin
+*.npy
+*.npz
+*.mlmodel
+*.mlmodelc/
+*.mlpackage/
