@@ -20,6 +20,10 @@ def require_apple_silicon() -> None:
 
 def build_bridge() -> Path:
     require_apple_silicon()
+    # The standalone installer ships a prebuilt bridge, so users need no Xcode Command Line Tools.
+    prebuilt = files("clef_ane.engine").joinpath("libane_bridge.dylib")
+    if prebuilt.is_file():
+        return Path(str(prebuilt))
     source = files("clef_ane.engine").joinpath("ane_bridge.m").read_bytes()
     digest = hashlib.sha256(source + platform.release().encode() + platform.machine().encode()).hexdigest()[:20]
     directory = paths.home() / "native" / digest

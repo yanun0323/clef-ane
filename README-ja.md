@@ -24,14 +24,22 @@ Mac の Neural Engine（ANE）という AI 処理用のチップで動くので�
 
 ## 必要なもの
 
-- Apple Silicon の Mac。今のところ M5 Pro と macOS 27 でしか試していません。
-- Python 3.12 以降。
-- Apple のコマンドラインツール：`xcode-select --install` を実行します。
-- 約 10 GiB の空きディスク容量。
+- Apple Silicon（M1 以降）の Mac と macOS 14 以降。今のところ M5 Pro と macOS 27 でしか試していません。
+- 約 11 GiB の空きディスク容量（プログラムに約 1 GiB、モデルに約 10 GiB）。
 
 ## インストール
 
-プロジェクトのフォルダで次を実行します。
+「ターミナル」で次を実行します。
+
+```sh
+curl -fsSL https://github.com/yanun0323/clef-ane/releases/latest/download/install.sh | sh
+```
+
+プログラム（約 260 MB）をダウンロードし、ファイルが壊れていないか確認してから、`clef-ane` コマンドを `~/.local/bin` に置きます。Python や Xcode は不要です。`~/.local/bin` が PATH に入っていないと表示された場合は、表示された 1 行のとおりに設定し、新しいターミナルを開いてください。
+
+アップデートするときは、同じコマンドをもう一度実行します。アンインストールするには、`~/.local/share/clef-ane` と `~/.local/bin/clef-ane` を削除します。ダウンロードしたモデルは `~/Library/Caches/clef-ane` にあります。
+
+ソースコードからインストールする場合（Python 3.12 以降と `xcode-select --install` が必要）は、プロジェクトのフォルダで次を実行します。
 
 ```sh
 python3 -m venv .venv
@@ -174,7 +182,6 @@ clef-ane serve --model-dir ~/clef-text-model
 - [ ] 大きすぎるファイルを拒否する代わりに、自動で縮小・短縮できるようにする（任意）。
 - [ ] より大きな Clef モデルに対応する。
 - [ ] Decision Index の公式ベンチマークを実行する。
-- [ ] Python が不要なインストーラーを用意する。
 
 ## 開発者向け
 
@@ -183,11 +190,14 @@ make install   # 開発用にインストール
 make test      # 短時間のテスト（モデル不要）
 make run       # サーバーを起動
 make request   # examples/request.json をサーバーに送信
+make package   # インストール用ファイルを dist/ に作成
 make help      # すべてのコマンドを表示
 ```
 
 元のモデルとの結果比較（`make test-model`、`make test-images`、`make test-videos`）には、元のモデルのファイルが必要です。モデルの作成とアップロード用のスクリプトは [`scripts/`](scripts/) にあります。
 
 ## ライセンス
+
+clef-ane は [Apache-2.0 ライセンス](LICENSE) で公開しています。インストール用ファイルには、それぞれ独自のライセンスを持つ他のソフトウェアも含まれており、インストール先フォルダの `THIRD_PARTY_NOTICES.txt` に一覧があります。その中には GPL ライセンスの FFmpeg コーデックライブラリ（x264 と x265）も含まれます。
 
 Clef-Flash は、Cloudflare が Qwen の Qwen3.5-9B をもとに作ったモデルで、どちらも Apache-2.0 ライセンスです。ダウンロードしたモデルには `LICENSE` と `NOTICE` が含まれ、[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) にある Cloudflare のコードも元のライセンスのままです。このプロジェクトは Cloudflare、Qwen、Apple の公式プロジェクトではありません。

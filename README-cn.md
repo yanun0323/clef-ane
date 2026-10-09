@@ -24,14 +24,22 @@ clef-ane 让你在 Mac 上运行 Cloudflare 的 [Clef-Flash](https://huggingface
 
 ## 需要准备
 
-- Apple Silicon 的 Mac。目前只在 M5 Pro、macOS 27 上测试过。
-- Python 3.12 或更高版本。
-- Apple 的命令行工具：运行 `xcode-select --install`。
-- 约 10 GiB 的可用磁盘空间。
+- Apple Silicon（M1 或更新）的 Mac，以及 macOS 14 或更高版本。目前只在 M5 Pro、macOS 27 上测试过。
+- 约 11 GiB 的可用磁盘空间：程序约 1 GiB，模型约 10 GiB。
 
 ## 安装
 
-在项目文件夹中运行：
+在“终端”中运行：
+
+```sh
+curl -fsSL https://github.com/yanun0323/clef-ane/releases/latest/download/install.sh | sh
+```
+
+它会下载程序（约 260 MB）、确认文件完整，再把 `clef-ane` 命令放到 `~/.local/bin`。不需要另外安装 Python 或 Xcode。如果安装程序提示 `~/.local/bin` 不在 PATH 中，按它显示的那一行操作，再打开一个新的终端窗口。
+
+需要更新时，再运行一次同样的命令。要卸载的话，删除 `~/.local/share/clef-ane` 和 `~/.local/bin/clef-ane`；下载的模型在 `~/Library/Caches/clef-ane`。
+
+如果想改为从源代码安装（需要 Python 3.12 或更高版本，并运行 `xcode-select --install`），在项目文件夹中运行：
 
 ```sh
 python3 -m venv .venv
@@ -174,7 +182,6 @@ clef-ane serve --model-dir ~/clef-text-model
 - [ ] 文件太大时可选择自动缩小或剪短，而不是直接拒绝。
 - [ ] 支持更大的 Clef 模型。
 - [ ] 运行 Decision Index 官方评测。
-- [ ] 提供不需要 Python 的安装程序。
 
 ## 开发者
 
@@ -183,11 +190,14 @@ make install   # 安装开发版
 make test      # 快速测试，不需要模型
 make run       # 启动服务
 make request   # 把 examples/request.json 发送到服务
+make package   # 把安装文件打包到 dist/
 make help      # 列出所有命令
 ```
 
 与原版模型比对结果（`make test-model`、`make test-images`、`make test-videos`）需要原版模型文件。构建和上传模型的脚本在 [`scripts/`](scripts/) 中。
 
 ## 许可
+
+clef-ane 使用 [Apache-2.0 许可](LICENSE)。安装包中还附带其他软件，各自有自己的许可，列在安装文件夹的 `THIRD_PARTY_NOTICES.txt` 中；其中包括 GPL 许可的 FFmpeg 编码库（x264 和 x265）。
 
 Clef-Flash 是 Cloudflare 基于 Qwen 的 Qwen3.5-9B 制作的，两者都使用 Apache-2.0 许可。下载的模型附带 `LICENSE` 和 `NOTICE`，[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) 中的 Cloudflare 代码也保留原有许可。本项目不是 Cloudflare、Qwen 或 Apple 的官方项目。

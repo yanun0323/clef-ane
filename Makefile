@@ -41,6 +41,10 @@ download:
 	@test -x $(CLI) || { echo "CLI not installed: run make install"; exit 1; }
 	$(CLI) download $(ARGS)
 
+## package: build the standalone installer bundle and install.sh into dist/ (network and Xcode Command Line Tools needed)
+package:
+	$(PY) scripts/build_standalone.py $(ARGS)
+
 ## request: send examples/request.json to the running server (another file with `make request -- file.json`)
 request:
 	curl -sS http://$(HOST):$(PORT)/v1/systemone -d @$(or $(ARGS),examples/request.json) | $(PY) -m json.tool

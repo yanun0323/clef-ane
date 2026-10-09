@@ -24,14 +24,22 @@ This is an experiment. It uses parts of macOS that Apple does not officially sup
 
 ## What you need
 
-- A Mac with Apple Silicon. So far it has only been tested on an M5 Pro with macOS 27.
-- Python 3.12 or newer.
-- Apple's command line tools: run `xcode-select --install`.
-- About 10 GiB of free disk space.
+- A Mac with Apple Silicon (M1 or newer) and macOS 14 or newer. So far it has only been tested on an M5 Pro with macOS 27.
+- About 11 GiB of free disk space: about 1 GiB for the program and about 10 GiB for the model.
 
 ## Install
 
-In the project folder, run:
+Run this in Terminal:
+
+```sh
+curl -fsSL https://github.com/yanun0323/clef-ane/releases/latest/download/install.sh | sh
+```
+
+It downloads the program (about 260 MB), checks that the download is intact, and puts the `clef-ane` command in `~/.local/bin`. You don't need Python or Xcode. If the installer says `~/.local/bin` is not on your PATH, follow the line it prints, then open a new terminal.
+
+Run the same command again to update. To uninstall, delete `~/.local/share/clef-ane` and `~/.local/bin/clef-ane`; downloaded models are in `~/Library/Caches/clef-ane`.
+
+To install from the source code instead (needs Python 3.12 or newer and `xcode-select --install`), run this in the project folder:
 
 ```sh
 python3 -m venv .venv
@@ -174,7 +182,6 @@ The original Clef-Flash can do these, but clef-ane can't yet:
 - [ ] Optionally shrink or trim files that are too big, instead of rejecting them.
 - [ ] Support the larger Clef model.
 - [ ] Run the official Decision Index benchmarks.
-- [ ] Offer an installer that doesn't need Python.
 
 ## For developers
 
@@ -183,11 +190,14 @@ make install   # install for development
 make test      # quick tests, no model needed
 make run       # start the server
 make request   # send examples/request.json to the server
+make package   # build the installer files into dist/
 make help      # list all commands
 ```
 
 Comparing results with the original model (`make test-model`, `make test-images`, `make test-videos`) needs the original model files. Scripts for building and uploading the model are in [`scripts/`](scripts/).
 
 ## License
+
+clef-ane is released under the [Apache-2.0 license](LICENSE). The installer bundle also contains third-party software under its own licenses, listed in `THIRD_PARTY_NOTICES.txt` inside the install folder; this includes FFmpeg codec libraries (x264 and x265) under the GPL.
 
 Clef-Flash was made by Cloudflare from Qwen's Qwen3.5-9B. Both use the Apache-2.0 license. The downloaded model includes the `LICENSE` and `NOTICE` files, and Cloudflare's code in [`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) keeps its license. This is not an official Cloudflare, Qwen, or Apple project.

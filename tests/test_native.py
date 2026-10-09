@@ -28,6 +28,14 @@ class NativeTests(unittest.TestCase):
             run.assert_called_once()
             self.assertIn("ane_bridge.m", run.call_args.args[0][-3])
 
+    def test_prebuilt_bridge_is_used_without_a_compiler(self):
+        with tempfile.TemporaryDirectory() as package:
+            (Path(package) / "libane_bridge.dylib").write_bytes(b"prebuilt")
+            with patch("clef_ane.native.files", return_value=Path(package)), \
+                    patch("clef_ane.native.require_apple_silicon"), patch("subprocess.run") as run:
+                self.assertEqual(build_bridge(), Path(package) / "libane_bridge.dylib")
+            run.assert_not_called()
+
     def test_failed_compiler_does_not_leave_a_cached_library(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"CLEF_ANE_HOME": home}), \
                 patch("clef_ane.native.require_apple_silicon"), \
