@@ -66,8 +66,8 @@ class Head:
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True, trust_remote_code=False)
         self.dtype = dtype
 
-    def encode(self, record: dict, max_length: int = 16384):
-        return clef.encode_record(self.tokenizer, record, max_length=max_length)
+    def encode(self, record: dict, max_length: int = 16384, *, processor=None):
+        return clef.encode_record(self.tokenizer, record, max_length=max_length, processor=processor)
 
     @torch.no_grad()
     def probabilities(self, hidden: torch.Tensor, encoded) -> dict[str, np.ndarray]:

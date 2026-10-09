@@ -24,7 +24,7 @@ def positive_int(value: str) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(prog="clef-ane", description="Run Clef-Flash text decisions on the Apple Neural Engine.")
+    result = argparse.ArgumentParser(prog="clef-ane", description="Run Clef-Flash decisions on the Apple Neural Engine.")
     result.add_argument("--version", action="version", version=f"clef-ane {__version__}")
     commands = result.add_subparsers(dest="command", required=True)
     download = commands.add_parser("download", help="download and check the ready-to-run LUT-6 model")
@@ -32,13 +32,16 @@ def parser() -> argparse.ArgumentParser:
     download.add_argument("--revision", default="main", help="Hub branch, tag, or commit (default: main)")
     download.add_argument("--model-dir", type=Path, default=paths.model_dir(), help="model directory (default: %(default)s)")
     download.add_argument("--force", action="store_true", help="download files again, including damaged cached files")
-    serve = commands.add_parser("serve", help="start the local text decision API; never downloads automatically")
+    serve = commands.add_parser("serve", help="start the local decision API; never downloads automatically")
     serve.add_argument("--model-dir", type=Path, default=paths.model_dir(), help="model directory (default: %(default)s)")
     serve.add_argument("--host", default="127.0.0.1", help="listen address (default: %(default)s); there is no authentication")
     serve.add_argument("--port", type=port_number, default=8080, help="listen port (default: %(default)s)")
     serve.add_argument("--max-tokens", type=int, choices=BUCKETS, default=BUCKETS[-1], help="maximum input length (default: %(default)s)")
-    serve.add_argument("--max-body-mb", type=positive_int, default=8, help="maximum request body size (default: %(default)s MB)")
+    serve.add_argument("--max-body-mb", type=positive_int, default=32, help="maximum JSON body size in MiB, including base64 overhead (default: %(default)s)")
     serve.add_argument("--name", default="clef-flash", help="model name reported by the API (default: %(default)s)")
+    serve.add_argument("--vision-device", choices=("ane", "mps", "cpu"), default="ane",
+                       help="vision encoder device: ane keeps the GPU idle (default), mps uses the Metal GPU (faster), "
+                            "cpu is slowest; media bundles only")
     return result
 
 
@@ -51,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from .server import serve
             serve(args.model_dir, host=args.host, port=args.port, max_tokens=args.max_tokens,
-                  name=args.name, max_body_mb=args.max_body_mb)
+                  name=args.name, max_body_mb=args.max_body_mb, vision_device=args.vision_device)
     except KeyboardInterrupt:
         return 130
     except Exception as error:

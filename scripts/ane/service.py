@@ -24,8 +24,8 @@ DEFAULT_LUT_BITS = 6
 
 
 class Service:
-    def __init__(self, backbone: Backbone, head: Head, name: str = "clef-flash") -> None:
-        self.backbone, self.head, self.name = backbone, head, name
+    def __init__(self, backbone: Backbone, head: Head, name: str = "clef-flash", *, vision=None) -> None:
+        self.backbone, self.head, self.name, self.vision = backbone, head, name, vision
         self.lock = threading.Lock()            # one ANE pipeline: requests run one at a time
 
     @classmethod
@@ -52,8 +52,16 @@ class Service:
         questions = request.get("questions")
         if "state" not in request:
             raise RequestError("state is required")
-        if request.get("images") or request.get("videos"):
-            raise RequestError("images and videos are not supported: this server runs the text backbone only")
+        if "media_kwargs" in request:
+            raise RequestError("media_kwargs is not supported; media limits are set by the server")
+        for field in ("images", "videos"):
+            if request.get(field) is not None and not isinstance(request[field], list):
+                raise RequestError(f"{field} must be a list of base64 data URLs")
+        has_media = bool(request.get("images") or request.get("videos"))
+        if has_media and self.vision is None:
+            raise RequestError("this model bundle is text-only; use --model-dir with a media-capable bundle")
+        if request.get("videos") and getattr(self.vision, "supports_video", False) is not True:
+            raise RequestError("this bundle has no video processor settings; download the combined image/video bundle")
         if not isinstance(questions, dict) or not questions:
             raise RequestError("at least one question is required")
         if len(questions) > 64:
@@ -68,16 +76,43 @@ class Service:
                 raise RequestError(f"{question_id}: score criteria must be a non-empty list")
             if kind == "noul" and criteria is not None and not isinstance(criteria, dict):
                 raise RequestError(f"{question_id}: noul criteria must be an object")
-        try:
-            encoded = self.head.encode(request, max_length=self.backbone.max_tokens)
-        except ValueError as error:                       # the schema by itself is longer than the largest bucket
-            raise TooLong(str(error)) from error
+        # Decode and preprocess inside the lock as well: concurrent requests cannot pile up decoded images.
         with self.lock:
-            hidden = self.backbone.hidden(list(encoded.input_ids))
+            images, videos, video_frames = [], [], 0
+            try:
+                if request.get("images"):
+                    from clef_ane.vision import decode_images
+                    images = decode_images(request["images"])
+                if request.get("videos"):
+                    from clef_ane.video import decode_videos
+                    videos = decode_videos(request["videos"])
+                    video_frames = sum(len(video.frames) for video in videos)
+                try:
+                    if has_media:
+                        encoded = self.head.encode({**request, "images": images, "videos": videos},
+                                                   max_length=self.backbone.max_tokens, processor=self.vision.processor)
+                    else:
+                        encoded = self.head.encode(request, max_length=self.backbone.max_tokens)
+                except ValueError as error:
+                    if str(error).startswith("schema requires "):  # includes media, before any state truncation
+                        raise TooLong(str(error)) from error
+                    raise RequestError("cannot encode the request; check the state, media, and questions") from error
+            finally:
+                for image in images:
+                    image.close()
+                images.clear()
+                videos.clear()
+            if has_media:
+                embeddings, positions = self.vision.prepare(encoded, self.backbone.embed)
+                hidden = self.backbone.hidden(list(encoded.input_ids), inputs_embeds=embeddings, position_ids=positions)
+            else:
+                hidden = self.backbone.hidden(list(encoded.input_ids))
             probabilities = self.head.probabilities(torch.from_numpy(hidden), encoded)
         answers = {
             q.question_id: clef.systemone_answer(questions[q.question_id], dict(zip(q.option_ids, map(float, probabilities[q.question_id]))))
             for q in encoded.questions
         }
-        return {"model": request.get("model") or self.name, "answers": answers,
-                "usage": {"input_tokens": len(encoded.input_ids), "output_tokens": 0}}
+        usage = {"input_tokens": len(encoded.input_ids), "output_tokens": 0}
+        if video_frames:
+            usage["video_frames"] = video_frames
+        return {"model": request.get("model") or self.name, "answers": answers, "usage": usage}

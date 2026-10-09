@@ -98,6 +98,27 @@ class BundleTests(unittest.TestCase):
         (self.root / "README.md").write_text("Updated usage instructions")
         self.assertEqual(load_bundle(self.root), self.manifest)
 
+    def test_image_bundle_requires_both_vision_files(self):
+        manifest = make_bundle(self.root, with_images=True)
+        self.assertEqual(load_bundle(self.root), manifest)
+        for name in ("weights/vision.safetensors", "processor_config.json"):
+            changed = copy.deepcopy(manifest)
+            changed["files"].pop(name)
+            with self.subTest(name=name), self.assertRaisesRegex(BundleError, "missing"):
+                validate_manifest(changed)
+
+    def test_vision_files_are_not_allowed_in_legacy_manifests(self):
+        manifest = make_bundle(self.root, with_images=True)
+        manifest["format_version"] = 1
+        with self.assertRaisesRegex(BundleError, "Unexpected file"):
+            validate_manifest(manifest)
+
+    def test_image_bundle_detects_vision_weight_corruption(self):
+        make_bundle(self.root, with_images=True)
+        (self.root / "weights/vision.safetensors").write_bytes(b"broken!\n")
+        with self.assertRaisesRegex(BundleError, "SHA-256"):
+            load_bundle(self.root)
+
     def test_native_buffer_size_is_bounded(self):
         path = self.root / "programs/00/test.json"
         spec = json.loads(path.read_text())

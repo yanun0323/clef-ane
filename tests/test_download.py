@@ -47,6 +47,14 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(load_bundle(self.local), self.manifest)
         self.assertEqual(json.loads((self.local / ".source.json").read_text()), {"repo_id": "owner/model", "revision": self.commit})
 
+    def test_image_bundle_download_includes_and_verifies_vision_files(self):
+        self.manifest = make_bundle(self.remote, with_images=True)
+        download_model(self.local, "owner/images")
+        self.assertEqual(load_bundle(self.local), self.manifest)
+        included = self.snapshot.call_args.kwargs["allow_patterns"]
+        self.assertIn("weights/vision.safetensors", included)
+        self.assertIn("processor_config.json", included)
+
     def test_fresh_install_uses_the_default_repository(self):
         with patch("clef_ane.paths.DEFAULT_REPO_ID", "owner/release"):
             download_model(self.local)

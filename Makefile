@@ -60,6 +60,22 @@ fetch:
 	@[ -f hf-meta/joint_schema_model.py ] || curl -fL $(HF)/joint_schema_model.py -o hf-meta/joint_schema_model.py
 	@for j in 0 1 2 3 4 5; do $(PY) scripts/fetch_all.py $$j 6 & done; wait
 
+## fetch-vision: download the pinned vision weights and settings (about 0.85 GiB; no text weights)
+fetch-vision:
+	$(PY) scripts/fetch_vision.py $(ARGS)
+
+## export-images: add image/video weights to a text bundle (pass --text-bundle and --output after --)
+export-images:
+	$(PY) scripts/export_bundle.py --with-images $(ARGS)
+
+## test-images: compare image decisions with BF16 and exercise HTTP (research weights; pass --model-dir after --)
+test-images: build
+	$(PY) scripts/verify_images.py $(ARGS)
+
+## test-videos: compare video, mixed-media and image decisions with BF16 (research weights; pass --model-dir after --)
+test-videos: build
+	$(PY) scripts/verify_videos.py $(ARGS)
+
 ## power: measure idle / ANE / GPU rail power with powermetrics (asks for your sudo password)
 power:
 	sudo scripts/measure_power.sh

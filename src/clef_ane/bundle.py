@@ -8,6 +8,8 @@ from pathlib import Path, PurePosixPath
 
 MANIFEST = "clef-ane.json"
 FORMAT_VERSION = 1
+IMAGE_FORMAT_VERSION = 2
+VISION_FILES = ("processor_config.json", "weights/vision.safetensors")
 BUCKETS = (1024, 2048, 4096, 8192, 16384)
 MODEL_FILES = (
     "config.json", "tokenizer.json", "tokenizer_config.json", "chat_template.jinja",
@@ -53,8 +55,10 @@ def read_json(path: Path) -> dict:
 
 
 def validate_manifest(data: dict) -> dict:
-    if data.get("format") != "clef-ane" or data.get("format_version") != FORMAT_VERSION:
+    version = data.get("format_version")
+    if data.get("format") != "clef-ane" or type(version) is not int or version not in (FORMAT_VERSION, IMAGE_FORMAT_VERSION):
         raise BundleError("Unsupported model format. Download a clef-ane LUT-6 bundle, not a Transformers or MLX checkpoint.")
+    model_files = MODEL_FILES + (VISION_FILES if version == IMAGE_FORMAT_VERSION else ())
     if data.get("quantization") != {"bits": 6, "group_size": 16, "method": "kmeans-lut"}:
         raise BundleError("This runtime requires a 6-bit, group-16 lookup-table bundle.")
     if data.get("rows") != 128 or data.get("buckets") != list(BUCKETS):
@@ -64,12 +68,12 @@ def validate_manifest(data: dict) -> dict:
         raise BundleError("The model manifest has no valid file inventory.")
     for name, info in files.items():
         safe_path(Path("/clef-ane-model"), name)
-        if name not in MODEL_FILES and not re.fullmatch(r"programs/\d{2}/[a-z0-9_-]+\.(json|bin)", name):
+        if name not in model_files and not re.fullmatch(r"programs/\d{2}/[a-z0-9_-]+\.(json|bin)", name):
             raise BundleError(f"Unexpected file in the model manifest: {name}")
         if (not isinstance(info, dict) or type(info.get("size")) is not int or info["size"] <= 0
                 or not isinstance(info.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", info["sha256"])):
             raise BundleError(f"Invalid size or SHA-256 for {name}")
-    for name in MODEL_FILES:
+    for name in model_files:
         if name not in files:
             raise BundleError(f"Model manifest is missing {name}")
     layers = data.get("layers")

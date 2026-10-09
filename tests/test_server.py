@@ -51,7 +51,37 @@ class HTTPTests(unittest.TestCase):
     def test_health(self):
         status, body = self.request("GET", "/health", None)
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"status": "ok", "model": "test-clef", "max_tokens": 1024})
+        self.assertEqual(body, {"status": "ok", "model": "test-clef", "max_tokens": 1024, "input_modalities": ["text"]})
+
+    def test_health_reports_image_capability(self):
+        with patch.object(self.server.service, "vision", object(), create=True):
+            status, body = self.request("GET", "/health", None)
+        self.assertEqual(status, 200)
+        self.assertEqual(body["input_modalities"], ["text", "image"])
+
+    def test_health_reports_video_capability(self):
+        with patch.object(self.server.service, "vision", SimpleNamespace(supports_video=True), create=True):
+            status, body = self.request("GET", "/health", None)
+        self.assertEqual(status, 200)
+        self.assertEqual(body["input_modalities"], ["text", "image", "video"])
+
+    def test_busy_server_rejects_before_reading_and_slots_recover(self):
+        slots = self.server.request_slots
+        slots.acquire()
+        slots.acquire()
+        try:
+            self.assertEqual(self.request(headers={"Content-Length": "999999"})[0], 503)
+            self.assertEqual(self.request("GET", "/health", None)[0], 200)
+        finally:
+            slots.release()
+            slots.release()
+        for _ in range(3):
+            self.assertEqual(self.request(body="invalid json")[0], 400)
+            self.assertEqual(self.request()[0], 200)
+
+    def test_default_body_limit_fits_embedded_videos(self):
+        with create_server(StubService(), port=0) as server:
+            self.assertEqual(server.max_body_bytes, 32 * 1024 * 1024)
 
     def test_model_listing(self):
         status, body = self.request("GET", "/v1/models", None)

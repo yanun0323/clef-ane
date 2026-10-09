@@ -43,12 +43,12 @@ assert 'clef_ane.engine.ane' not in sys.modules
     def test_serve_arguments_are_forwarded_without_download(self):
         with patch("clef_ane.server.serve") as serve, patch("clef_ane.download.download_model") as download:
             self.assertEqual(main(["serve", "--model-dir", "/tmp/model", "--port", "9999", "--max-tokens", "4096", "--name", "test"]), 0)
-            serve.assert_called_once_with(Path("/tmp/model"), host="127.0.0.1", port=9999, max_tokens=4096, name="test", max_body_mb=8)
+            serve.assert_called_once_with(Path("/tmp/model"), host="127.0.0.1", port=9999, max_tokens=4096, name="test", max_body_mb=32, vision_device="ane")
             download.assert_not_called()
 
     def test_invalid_arguments_fail_before_loading(self):
         for args in (["serve", "--port", "-1"], ["serve", "--port", "65536"], ["serve", "--max-tokens", "123"],
-                     ["serve", "--max-body-mb", "0"], ["serve", "--port", "not-a-port"], [], ["unknown"]):
+                     ["serve", "--max-body-mb", "0"], ["serve", "--vision-device", "cuda"], ["serve", "--port", "not-a-port"], [], ["unknown"]):
             with self.subTest(args=args), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                 parser().parse_args(args)
             self.assertEqual(error.exception.code, 2)

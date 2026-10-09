@@ -145,10 +145,23 @@ ROPE_THETA = 1.0e7
 MASK_NEG = -30000.0
 
 
-def rope_tables(start: int, rows: int) -> tuple[np.ndarray, np.ndarray]:
-    """cos/sin for text positions start..start+rows-1, shaped [1, 1, rows, 64] (frequencies repeated for both halves)."""
-    inv = 1.0 / ROPE_THETA ** (np.arange(0, ROT_DIM, 2) / ROT_DIM)
-    ang = np.arange(start, start + rows)[:, None] * inv[None]
+def rope_tables(start: int, rows: int, position_ids: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Host cos/sin tables [1, 1, rows, 64]; optional Qwen3.5 temporal/height/width positions.
+
+    The text path deliberately keeps its original arithmetic. Multimodal frequencies are
+    interleaved T/H/W with sections [11, 11, 10], not concatenated in three blocks.
+    """
+    if position_ids is None:
+        inv = 1.0 / ROPE_THETA ** (np.arange(0, ROT_DIM, 2) / ROT_DIM)
+        ang = np.arange(start, start + rows)[:, None] * inv[None]
+    else:
+        if position_ids.shape != (3, rows) or not np.issubdtype(position_ids.dtype, np.integer) or np.any(position_ids < 0):
+            raise ValueError("position_ids must contain three nonnegative integer positions per token")
+        inv = 1.0 / np.float32(ROPE_THETA) ** (np.arange(0, ROT_DIM, 2, dtype=np.float32) / np.float32(ROT_DIM))
+        freqs = position_ids.astype(np.float32)[..., None] * inv
+        ang = freqs[0].copy()
+        ang[:, 1:33:3] = freqs[1, :, 1:33:3]
+        ang[:, 2:30:3] = freqs[2, :, 2:30:3]
     full = np.concatenate([ang, ang], axis=-1)
     return np.cos(full)[None, None].astype(np.float16), np.sin(full)[None, None].astype(np.float16)
 

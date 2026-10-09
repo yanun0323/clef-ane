@@ -6,4 +6,4 @@ class RequestError(ValueError):
 
 
 class TooLong(RequestError):
-    """The schema alone does not fit the largest context (HTTP 413)."""
+    """The request exceeds an input size, pixel, or context limit (HTTP 413)."""
