@@ -7,6 +7,8 @@ name = "clef-ane"
 version = "0.2.0"
 description = "Run Clef-Flash text, image, and video decisions on the Apple Neural Engine"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "src/clef_ane/_vendor/LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "torch>=2.11,<3",
