@@ -4,7 +4,8 @@ from setuptools.command.build_py import build_py
 
 
 class RuntimeBuild(build_py):
-    runtime_modules = {"__init__", "ane", "mil", "layers", "delta", "lutq", "runtime", "service", "ref_backbone", "errors"}
+    runtime_modules = {"__init__", "ane", "mil", "layers", "delta", "lutq", "runtime", "service", "ref_backbone", "errors",
+                       "vision_encoder"}
 
     def find_package_modules(self, package, package_dir):
         modules = super().find_package_modules(package, package_dir)
