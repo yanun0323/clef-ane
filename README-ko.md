@@ -8,7 +8,7 @@
   <a href="README-ko.md"><img src="https://img.shields.io/badge/한국어-클릭-yellow" alt="한국어"></a>
 </p>
 
-clef-ane는 Cloudflare의 [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash)를 Mac에서 실행하는 도구입니다. Clef-Flash는 판단을 내려 주는 모델입니다. 상황을 설명하고 질문하면, 각 답이 얼마나 그럴듯한지 알려 줍니다. 상황은 텍스트, 이미지, 짧은 동영상으로 설명할 수 있습니다.
+clef-ane는 Cloudflare의 [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash)와 더 큰 [Clef](https://huggingface.co/Cloudflare/clef)를 Mac에서 실행하는 도구입니다. 둘 다 판단을 내려 주는 모델입니다. 상황을 설명하고 질문하면, 각 답이 얼마나 그럴듯한지 알려 줍니다. 상황은 텍스트, 이미지, 짧은 동영상으로 설명할 수 있습니다.
 
 Mac의 Neural Engine(ANE)이라는 AI 전용 칩에서 실행되므로, 그래픽 칩(GPU)은 다른 작업에 그대로 쓸 수 있습니다. 모든 처리는 Mac 안에서 이루어지며 인터넷 연결이 필요 없습니다.
 
@@ -26,6 +26,7 @@ Mac의 Neural Engine(ANE)이라는 AI 전용 칩에서 실행되므로, 그래�
 
 - Apple Silicon(M1 이상) Mac과 macOS 14 이상. 지금까지는 macOS 27을 실행하는 M5 Pro에서만 테스트했습니다.
 - 약 11 GiB의 여유 디스크 공간(프로그램 약 1 GiB, 모델 약 10 GiB).
+- 더 큰 Clef 모델을 쓰려면 약 24 GiB의 여유 디스크 공간과 메모리 48 GB 이상인 Mac이 필요합니다. 지금까지는 64 GB에서만 테스트했습니다.
 
 ## 설치
 
@@ -57,9 +58,28 @@ clef-ane serve
 ```
 
 - Hugging Face 계정은 필요 없습니다. 다운로드가 멈추면 같은 명령을 다시 실행해 이어서 받으세요.
-- 시작하는 데 약 1.5분이 걸립니다. `Listening on http://127.0.0.1:8080`이 보이면 준비된 것입니다.
+- 시작하는 데 약 2분이 걸립니다. `Listening on http://127.0.0.1:8080`이 보이면 준비된 것입니다.
 - 이미지나 동영상이 들어간 첫 요청은 약 10초 더 걸립니다. 그 뒤로는 빠릅니다.
 - `Ctrl-C`를 누르면 멈춥니다.
+
+### 더 큰 Clef 모델
+
+기본값은 Clef-Flash입니다. Clef를 쓰려면 두 명령에 모두 `--model clef`를 붙입니다.
+
+```sh
+clef-ane download --model clef
+clef-ane serve --model clef
+```
+
+| | Clef-Flash | Clef |
+|---|---|---|
+| 원래 모델 크기 | 9B | 27B |
+| 다운로드 | 9.74 GiB | 22.94 GiB |
+| 시작 시간 | 약 2분 | 약 7분 |
+| 실행 중 사용하는 메모리 | 약 14 GiB | 약 27 GiB |
+| 아래 예시 질문 | 약 0.5초 | 약 1.6초 |
+
+메모리 64 GB인 M5 Pro에서 잰 값입니다. 두 모델을 모두 내려받아 둘 수 있지만, 한 번에 하나만 실행할 수 있습니다. 둘을 함께 Neural Engine에 올릴 수는 없습니다. Cloudflare의 자체 결과를 보면 Clef가 더 나은 작업도 있고 Clef-Flash가 더 나은 작업도 있습니다. 자세한 내용은 [Clef 모델 카드](https://huggingface.co/Cloudflare/clef)를 보세요.
 
 > [!WARNING]
 > 서버에는 비밀번호가 없습니다. 기본적으로 내 Mac에서만 접속할 수 있습니다. 믿을 수 있는 네트워크가 아니라면 다른 컴퓨터에 열지 마세요.
@@ -146,12 +166,13 @@ python examples/video_request.py clip.mp4 --question "Does the person enter the 
 
 | 옵션 | 기본값 | 하는 일 |
 |---|---|---|
+| `--model` | `clef-flash` | 사용할 모델. `clef-flash` 또는 `clef`. `download`와 `serve`에 같은 값을 씁니다 |
 | `--port` | `8080` | 사용할 포트 번호 |
 | `--host` | `127.0.0.1` | 접속을 받을 주소. 기본값은 내 Mac에서만 접속을 허용합니다 |
 | `--max-tokens` | `16384` | 받을 수 있는 가장 긴 입력. 숫자가 작을수록 메모리를 덜 씁니다 |
 | `--max-body-mb` | `32` | 요청 크기 한도(MiB) |
 | `--vision-device` | `ane` | 이미지와 동영상을 처리할 곳. `ane`은 GPU를 쓰지 않고, `mps`는 GPU를 써서 조금 더 빠르며, `cpu`가 가장 느립니다 |
-| `--model-dir` | `~/Library/Caches/clef-ane` 안 | 모델 저장 위치 |
+| `--model-dir` | `~/Library/Caches/clef-ane` 안 | 모델 저장 위치. 모델마다 폴더가 따로 있습니다 |
 
 모든 옵션은 `clef-ane --help`로 볼 수 있습니다. `CLEF_ANE_HOME`을 설정해 모델 저장 위치를 바꿀 수도 있습니다.
 
@@ -165,13 +186,14 @@ clef-ane serve --model-dir ~/clef-text-model
 ## 현재 한계
 
 - 요청은 한 번에 하나씩 처리합니다. 하나 더 기다릴 수 있고, 그 이상은 "사용 중" 오류를 받습니다.
-- 27개 테스트 질문에서는 원래 모델과 같은 답을 냈습니다. 하지만 Clef-Flash 공식 벤치마크는 돌려 보지 않았으므로 전체 정확도는 다를 수 있습니다.
+- 27개 테스트 질문에서는 두 모델 모두 각자의 원래 모델과 같은 답을 냈습니다. 하지만 공식 벤치마크는 돌려 보지 않았으므로 전체 정확도는 다를 수 있습니다.
+- macOS에서는 모든 앱을 합쳐 Neural Engine에 프로그램을 127개까지만 올릴 수 있습니다. 이미지 기능까지 쓰면 Clef-Flash는 123개, Clef는 124개를 씁니다. 다른 앱이 Neural Engine을 쓰고 있으면 시작이 실패할 수 있습니다. `--max-tokens`를 줄이면 더 적게 씁니다.
 - 이미지와 동영상은 원래 모델이 다룰 수 있는 것보다 낮은 해상도로 사용하므로, 세부 내용이 많은 사진은 덜 정확할 수 있습니다.
 - 주어진 선택지에 점수를 매길 뿐, 글을 쓰지는 않습니다.
 
 ## 할 일
 
-원래 Clef-Flash는 할 수 있지만 clef-ane는 아직 못 하는 것:
+원래 모델은 할 수 있지만 clef-ane는 아직 못 하는 것:
 
 - [ ] 여러 요청을 한꺼번에 처리하기.
 - [ ] 더 선명한 이미지와 4장을 넘는 이미지 사용하기.
@@ -180,7 +202,6 @@ clef-ane serve --model-dir ~/clef-text-model
 - [ ] 상황 설명 텍스트를 어디까지 읽을지 제한할 수 있게 하기(`max_state_tokens`).
 - [ ] 각 답의 바탕이 되는 원시 점수(logits) 돌려주기.
 - [ ] 너무 큰 파일을 거부하는 대신 원하면 자동으로 줄이거나 자르기.
-- [ ] 더 큰 Clef 모델 지원하기.
 - [ ] Decision Index 공식 벤치마크 돌리기.
 
 ## 개발자용
@@ -194,10 +215,10 @@ make package   # 설치 파일을 dist/에 만들기
 make help      # 모든 명령 보기
 ```
 
-원래 모델과 결과를 비교하려면(`make test-model`, `make test-images`, `make test-videos`) 원래 모델 파일이 필요합니다. 모델을 만들고 올리는 스크립트는 [`scripts/`](scripts/)에 있습니다.
+원래 모델과 결과를 비교하려면(`make test-model`, `make test-images`, `make test-videos`) 원래 모델 파일이 필요합니다. 모델을 만들고 올리는 스크립트는 [`scripts/`](scripts/)에 있습니다. 이 명령들은 기본적으로 Clef-Flash를 다루며, Clef를 다루려면 `make fetch MODEL=clef`처럼 `MODEL=clef`를 붙입니다.
 
 ## 라이선스
 
 clef-ane는 [Apache-2.0 라이선스](LICENSE)로 공개됩니다. 설치 파일에는 각자의 라이선스를 따르는 다른 소프트웨어도 들어 있으며, 설치 폴더의 `THIRD_PARTY_NOTICES.txt`에 목록이 있습니다. 여기에는 GPL 라이선스의 FFmpeg 코덱 라이브러리(x264, x265)도 포함됩니다.
 
-Clef-Flash는 Cloudflare가 Qwen의 Qwen3.5-9B를 바탕으로 만든 모델이며, 둘 다 Apache-2.0 라이선스입니다. 내려받은 모델에는 `LICENSE`와 `NOTICE`가 들어 있고, [`src/clef_ane/_vendor/`](src/clef_ane/_vendor/)의 Cloudflare 코드도 원래 라이선스를 그대로 따릅니다. 이 프로젝트는 Cloudflare, Qwen, Apple의 공식 프로젝트가 아닙니다.
+Cloudflare는 Qwen의 Qwen3.5-9B를 바탕으로 Clef-Flash를, Qwen3.8-27B를 바탕으로 Clef를 만들었습니다. 모두 Apache-2.0 라이선스입니다. 내려받은 모델에는 `LICENSE`와 `NOTICE`가 들어 있고, [`src/clef_ane/_vendor/`](src/clef_ane/_vendor/)의 Cloudflare 코드도 원래 라이선스를 그대로 따릅니다. 이 프로젝트는 Cloudflare, Qwen, Apple의 공식 프로젝트가 아닙니다.

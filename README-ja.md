@@ -8,7 +8,7 @@
   <a href="README-ko.md"><img src="https://img.shields.io/badge/한국어-클릭-yellow" alt="한국어"></a>
 </p>
 
-clef-ane は、Cloudflare の [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash) を Mac で動かすためのツールです。Clef-Flash は判断をするモデルです。状況を説明して質問すると、それぞれの答えがどのくらいありそうかを教えてくれます。状況はテキスト、画像、短い動画で伝えられます。
+clef-ane は、Cloudflare の [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash) と、より大きな [Clef](https://huggingface.co/Cloudflare/clef) を Mac で動かすためのツールです。どちらも判断をするモデルです。状況を説明して質問すると、それぞれの答えがどのくらいありそうかを教えてくれます。状況はテキスト、画像、短い動画で伝えられます。
 
 Mac の Neural Engine（ANE）という AI 処理用のチップで動くので、グラフィックス（GPU）はほかの作業のために空いたままです。処理はすべて Mac の中で行われ、インターネット接続は不要です。
 
@@ -26,6 +26,7 @@ Mac の Neural Engine（ANE）という AI 処理用のチップで動くので�
 
 - Apple Silicon（M1 以降）の Mac と macOS 14 以降。今のところ M5 Pro と macOS 27 でしか試していません。
 - 約 11 GiB の空きディスク容量（プログラムに約 1 GiB、モデルに約 10 GiB）。
+- より大きな Clef モデルを使う場合は、約 24 GiB の空きディスク容量と、メモリが 48 GB 以上の Mac。今のところ 64 GB でしか試していません。
 
 ## インストール
 
@@ -57,9 +58,28 @@ clef-ane serve
 ```
 
 - Hugging Face のアカウントは不要です。ダウンロードが止まったら、同じコマンドをもう一度実行すると続きから再開します。
-- 起動には約 1.5 分かかります。`Listening on http://127.0.0.1:8080` と表示されたら使えます。
+- 起動には約 2 分かかります。`Listening on http://127.0.0.1:8080` と表示されたら使えます。
 - 画像や動画を含む最初のリクエストは、約 10 秒長くかかります。その後は速くなります。
 - 止めるときは `Ctrl-C` を押します。
+
+### より大きな Clef モデル
+
+初期設定では Clef-Flash を使います。Clef を使うには、両方のコマンドに `--model clef` を付けます。
+
+```sh
+clef-ane download --model clef
+clef-ane serve --model clef
+```
+
+| | Clef-Flash | Clef |
+|---|---|---|
+| 元のモデルの大きさ | 9B | 27B |
+| ダウンロード | 9.74 GiB | 22.94 GiB |
+| 起動にかかる時間 | 約 2 分 | 約 7 分 |
+| 実行中に使うメモリ | 約 14 GiB | 約 27 GiB |
+| 下の例の質問 | 約 0.5 秒 | 約 1.6 秒 |
+
+メモリ 64 GB の M5 Pro で測った値です。2 つのモデルは両方ダウンロードしておけますが、動かせるのは一度に 1 つです。2 つ同時には Neural Engine に入りません。Cloudflare 自身の結果では、Clef のほうが良いタスクも、Clef-Flash のほうが良いタスクもあります。詳しくは [Clef のモデルカード](https://huggingface.co/Cloudflare/clef)を見てください。
 
 > [!WARNING]
 > サーバーにはパスワードがありません。初期設定では、あなたの Mac からしか接続できません。信頼できるネットワーク以外では、ほかのコンピューターに公開しないでください。
@@ -146,12 +166,13 @@ python examples/video_request.py clip.mp4 --question "Does the person enter the 
 
 | オプション | 初期値 | 内容 |
 |---|---|---|
+| `--model` | `clef-flash` | 使うモデル。`clef-flash` か `clef`。`download` と `serve` で同じものを指定します |
 | `--port` | `8080` | 使うポート番号 |
 | `--host` | `127.0.0.1` | 接続を受け付けるアドレス。初期値ではあなたの Mac からのみ接続できます |
 | `--max-tokens` | `16384` | 受け付ける入力の最大の長さ。小さくするとメモリ使用量が減ります |
 | `--max-body-mb` | `32` | リクエストサイズの上限（MiB） |
 | `--vision-device` | `ane` | 画像と動画をどこで処理するか。`ane` は GPU を使いません。`mps` は GPU を使い、少し速くなります。`cpu` は最も遅くなります |
-| `--model-dir` | `~/Library/Caches/clef-ane` 内 | モデルの保存場所 |
+| `--model-dir` | `~/Library/Caches/clef-ane` 内 | モデルの保存場所。モデルごとに別のフォルダーです |
 
 すべてのオプションは `clef-ane --help` で確認できます。`CLEF_ANE_HOME` を設定して、モデルの保存場所を変えることもできます。
 
@@ -165,13 +186,14 @@ clef-ane serve --model-dir ~/clef-text-model
 ## 現在の制限
 
 - リクエストは 1 つずつ処理します。もう 1 つまで待機でき、それ以上は「混雑中」のエラーになります。
-- 27 問のテストでは、元のモデルと同じ答えになりました。ただし Clef-Flash 公式のベンチマークは実行していないため、全体的な精度は異なる可能性があります。
+- 27 問のテストでは、どちらのモデルもそれぞれの元のモデルと同じ答えになりました。ただし公式のベンチマークは実行していないため、全体的な精度は異なる可能性があります。
+- macOS では、すべてのアプリを合わせて 127 個までのプログラムしか Neural Engine に置けません。画像機能を含めると、Clef-Flash は 123 個、Clef は 124 個を使います。ほかのアプリが Neural Engine を使っていると、起動に失敗することがあります。`--max-tokens` を小さくすると、使う数が減ります。
 - 画像と動画は元のモデルが扱える解像度より低くして使うため、細かい部分の多い画像では精度が下がることがあります。
 - 指定した選択肢に点数をつけるだけで、文章は書きません。
 
 ## やることリスト
 
-元の Clef-Flash にはできて、clef-ane にはまだできないこと：
+元のモデルにはできて、clef-ane にはまだできないこと：
 
 - [ ] 複数のリクエストを同時に処理する。
 - [ ] より鮮明な画像と、4 枚を超える画像を使う。
@@ -180,7 +202,6 @@ clef-ane serve --model-dir ~/clef-text-model
 - [ ] 状況説明のテキストをどこまで読むか制限できるようにする（`max_state_tokens`）。
 - [ ] 各答えのもとになる生のスコア（logits）を返す。
 - [ ] 大きすぎるファイルを拒否する代わりに、自動で縮小・短縮できるようにする（任意）。
-- [ ] より大きな Clef モデルに対応する。
 - [ ] Decision Index の公式ベンチマークを実行する。
 
 ## 開発者向け
@@ -194,10 +215,10 @@ make package   # インストール用ファイルを dist/ に作成
 make help      # すべてのコマンドを表示
 ```
 
-元のモデルとの結果比較（`make test-model`、`make test-images`、`make test-videos`）には、元のモデルのファイルが必要です。モデルの作成とアップロード用のスクリプトは [`scripts/`](scripts/) にあります。
+元のモデルとの結果比較（`make test-model`、`make test-images`、`make test-videos`）には、元のモデルのファイルが必要です。モデルの作成とアップロード用のスクリプトは [`scripts/`](scripts/) にあります。これらは Clef-Flash を対象にします。Clef を対象にするには、`make fetch MODEL=clef` のように `MODEL=clef` を付けます。
 
 ## ライセンス
 
 clef-ane は [Apache-2.0 ライセンス](LICENSE) で公開しています。インストール用ファイルには、それぞれ独自のライセンスを持つ他のソフトウェアも含まれており、インストール先フォルダの `THIRD_PARTY_NOTICES.txt` に一覧があります。その中には GPL ライセンスの FFmpeg コーデックライブラリ（x264 と x265）も含まれます。
 
-Clef-Flash は、Cloudflare が Qwen の Qwen3.5-9B をもとに作ったモデルで、どちらも Apache-2.0 ライセンスです。ダウンロードしたモデルには `LICENSE` と `NOTICE` が含まれ、[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) にある Cloudflare のコードも元のライセンスのままです。このプロジェクトは Cloudflare、Qwen、Apple の公式プロジェクトではありません。
+Cloudflare は、Qwen の Qwen3.5-9B をもとに Clef-Flash を、Qwen3.8-27B をもとに Clef を作りました。いずれも Apache-2.0 ライセンスです。ダウンロードしたモデルには `LICENSE` と `NOTICE` が含まれ、[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) にある Cloudflare のコードも元のライセンスのままです。このプロジェクトは Cloudflare、Qwen、Apple の公式プロジェクトではありません。

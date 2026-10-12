@@ -8,7 +8,7 @@
   <a href="README-ko.md"><img src="https://img.shields.io/badge/한국어-클릭-yellow" alt="한국어"></a>
 </p>
 
-clef-ane 让你在 Mac 上运行 Cloudflare 的 [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash)。Clef-Flash 是一个帮你做判断的模型：你描述一个情况、提出问题，它会告诉你每个答案的可能性有多大。情况可以用文字、图片或短视频来描述。
+clef-ane 让你在 Mac 上运行 Cloudflare 的 [Clef-Flash](https://huggingface.co/Cloudflare/clef-flash)，以及更大的 [Clef](https://huggingface.co/Cloudflare/clef)。它们是帮你做判断的模型：你描述一个情况、提出问题，模型会告诉你每个答案的可能性有多大。情况可以用文字、图片或短视频来描述。
 
 它在 Mac 的神经网络引擎（ANE）上运行，这是专门处理 AI 计算的芯片，所以显卡（GPU）可以留给其他工作。所有计算都在你的 Mac 上完成，不需要联网。
 
@@ -26,6 +26,7 @@ clef-ane 让你在 Mac 上运行 Cloudflare 的 [Clef-Flash](https://huggingface
 
 - Apple Silicon（M1 或更新）的 Mac，以及 macOS 14 或更高版本。目前只在 M5 Pro、macOS 27 上测试过。
 - 约 11 GiB 的可用磁盘空间：程序约 1 GiB，模型约 10 GiB。
+- 如果要用更大的 Clef 模型：约 24 GiB 的可用磁盘空间，以及至少 48 GB 内存的 Mac。目前只在 64 GB 上测试过。
 
 ## 安装
 
@@ -57,9 +58,28 @@ clef-ane serve
 ```
 
 - 不需要 Hugging Face 账号。下载中断的话，再运行一次同样的命令就会接着下载。
-- 启动约需 1.5 分钟。看到 `Listening on http://127.0.0.1:8080` 就可以开始用了。
+- 启动约需 2 分钟。看到 `Listening on http://127.0.0.1:8080` 就可以开始用了。
 - 第一次发送图片或视频时会多等约 10 秒，之后就很快。
 - 按 `Ctrl-C` 停止。
+
+### 更大的 Clef 模型
+
+默认使用 Clef-Flash。想改用 Clef，在两个命令后都加上 `--model clef`：
+
+```sh
+clef-ane download --model clef
+clef-ane serve --model clef
+```
+
+| | Clef-Flash | Clef |
+|---|---|---|
+| 原版模型大小 | 9B | 27B |
+| 下载大小 | 9.74 GiB | 22.94 GiB |
+| 启动时间 | 约 2 分钟 | 约 7 分钟 |
+| 运行时使用的内存 | 约 14 GiB | 约 27 GiB |
+| 下面的示例问题 | 约 0.5 秒 | 约 1.6 秒 |
+
+以上是在 64 GB 内存的 M5 Pro 上测得的。两个模型可以都下载，但一次只能运行一个：神经网络引擎放不下两个。根据 Cloudflare 自己的评测，有些任务 Clef 更好，有些是 Clef-Flash 更好，详见 [Clef 的模型说明](https://huggingface.co/Cloudflare/clef)。
 
 > [!WARNING]
 > 服务没有密码保护，默认只有你自己的 Mac 能连接。除非是可信的网络，否则不要开放给其他电脑。
@@ -146,12 +166,13 @@ python examples/video_request.py clip.mp4 --question "Does the person enter the 
 
 | 选项 | 默认值 | 作用 |
 |---|---|---|
+| `--model` | `clef-flash` | 使用哪个模型：`clef-flash` 或 `clef`。`download` 和 `serve` 要用同一个 |
 | `--port` | `8080` | 使用的端口 |
 | `--host` | `127.0.0.1` | 接收连接的地址。默认只允许你自己的 Mac |
 | `--max-tokens` | `16384` | 可接受的最长输入。数字越小，占用内存越少 |
 | `--max-body-mb` | `32` | 请求大小上限（MiB） |
 | `--vision-device` | `ane` | 图片和视频在哪里处理。`ane` 不占用 GPU；`mps` 使用 GPU，稍微快一点；`cpu` 最慢 |
-| `--model-dir` | 在 `~/Library/Caches/clef-ane` 中 | 模型存放位置 |
+| `--model-dir` | 在 `~/Library/Caches/clef-ane` 中 | 模型存放位置。每个模型有自己的文件夹 |
 
 全部选项请运行 `clef-ane --help`。也可以设置 `CLEF_ANE_HOME` 来指定模型的存放位置。
 
@@ -165,13 +186,14 @@ clef-ane serve --model-dir ~/clef-text-model
 ## 当前限制
 
 - 一次只处理一个请求，另外一个可以排队，更多的会收到“忙碌中”的错误。
-- 在我们的 27 道测试题中，答案都与原版模型相同。但我们没有运行 Clef-Flash 的官方评测，整体准确率可能不同。
+- 在我们的 27 道测试题中，两个模型的答案都与各自的原版相同。但我们没有运行官方评测，整体准确率可能不同。
+- macOS 让所有应用加起来最多在神经网络引擎上放 127 个程序。带图片功能时，Clef-Flash 会用掉 123 个，Clef 会用掉 124 个。如果有其他应用正在使用神经网络引擎，启动可能会失败；把 `--max-tokens` 设小一点可以少用一些。
 - 图片和视频的分辨率比原版能使用的低，所以细节丰富的图片可能不够准确。
 - 它只会为你给出的选项打分，不会生成文字。
 
 ## 待办事项
 
-原版 Clef-Flash 能做到、但 clef-ane 还做不到的：
+原版模型能做到、但 clef-ane 还做不到的：
 
 - [ ] 同时处理多个请求。
 - [ ] 使用更清晰的图片，以及超过 4 张图片。
@@ -180,7 +202,6 @@ clef-ane serve --model-dir ~/clef-text-model
 - [ ] 让你限制读取多少情况描述文字（`max_state_tokens`）。
 - [ ] 返回每个答案背后的原始分数（logits）。
 - [ ] 文件太大时可选择自动缩小或剪短，而不是直接拒绝。
-- [ ] 支持更大的 Clef 模型。
 - [ ] 运行 Decision Index 官方评测。
 
 ## 开发者
@@ -194,10 +215,10 @@ make package   # 把安装文件打包到 dist/
 make help      # 列出所有命令
 ```
 
-与原版模型比对结果（`make test-model`、`make test-images`、`make test-videos`）需要原版模型文件。构建和上传模型的脚本在 [`scripts/`](scripts/) 中。
+与原版模型比对结果（`make test-model`、`make test-images`、`make test-videos`）需要原版模型文件。构建和上传模型的脚本在 [`scripts/`](scripts/) 中。这些命令默认处理 Clef-Flash，加上 `MODEL=clef` 才会处理 Clef，例如 `make fetch MODEL=clef`。
 
 ## 许可
 
 clef-ane 使用 [Apache-2.0 许可](LICENSE)。安装包中还附带其他软件，各自有自己的许可，列在安装文件夹的 `THIRD_PARTY_NOTICES.txt` 中；其中包括 GPL 许可的 FFmpeg 编码库（x264 和 x265）。
 
-Clef-Flash 是 Cloudflare 基于 Qwen 的 Qwen3.5-9B 制作的，两者都使用 Apache-2.0 许可。下载的模型附带 `LICENSE` 和 `NOTICE`，[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) 中的 Cloudflare 代码也保留原有许可。本项目不是 Cloudflare、Qwen 或 Apple 的官方项目。
+Cloudflare 基于 Qwen 的 Qwen3.5-9B 制作了 Clef-Flash，基于 Qwen3.8-27B 制作了 Clef，它们都使用 Apache-2.0 许可。下载的模型附带 `LICENSE` 和 `NOTICE`，[`src/clef_ane/_vendor/`](src/clef_ane/_vendor/) 中的 Cloudflare 代码也保留原有许可。本项目不是 Cloudflare、Qwen 或 Apple 的官方项目。
