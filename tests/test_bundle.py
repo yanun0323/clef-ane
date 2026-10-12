@@ -55,6 +55,45 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(BundleError, "context"):
             validate_manifest(self.manifest)
 
+    def test_larger_clef_bundle_is_valid(self):
+        manifest = make_bundle(self.root, layer_count=64)
+        self.assertEqual(len(load_bundle(self.root)["layers"]), 64)
+        manifest["layers"][63]["mixers"].pop("16384")
+        with self.assertRaisesRegex(BundleError, "context"):
+            validate_manifest(manifest)
+
+    def test_block_layout_is_valid_and_its_mistakes_are_rejected(self):
+        manifest = make_bundle(self.root, layer_count=64, blocks=True)
+        self.assertEqual(load_bundle(self.root), manifest)
+        self.assertEqual(len({layer["block"] for layer in manifest["layers"] if "block" in layer}), 16)
+        self.assertEqual([index for index, layer in enumerate(manifest["layers"]) if "mlp" in layer], [63])
+
+        def changed(edit):
+            data = copy.deepcopy(manifest)
+            edit(data)
+            return data
+        mistakes = {
+            "the last layer's MLP is missing": lambda m: m["layers"][63].pop("mlp"),
+            "a block program is not in the bundle": lambda m: m["layers"][0].update(block="programs/00/other.json"),
+            "a block is split by another one": lambda m: m["layers"][4].update(block=m["layers"][0]["block"]),
+            "a full-attention layer has no context programs": lambda m: m["layers"][3].pop("mixers"),
+            "a linear layer has no block": lambda m: m["layers"][1].pop("block"),
+            "an older bundle uses blocks": lambda m: m.update(format_version=2),
+        }
+        for name, edit in mistakes.items():
+            with self.subTest(name), self.assertRaises(BundleError):
+                validate_manifest(changed(edit))
+
+    def test_blocks_are_not_part_of_the_older_layout(self):
+        self.manifest["layers"][0]["block"] = "programs/00/test.json"
+        with self.assertRaisesRegex(BundleError, "layer 0"):
+            validate_manifest(self.manifest)
+
+    def test_invalid_layer_lists_are_rejected(self):
+        for layers in ([], self.manifest["layers"][:30], self.manifest["layers"] * 9, "layers"):
+            with self.subTest(layers=len(layers)), self.assertRaisesRegex(BundleError, "text layers"):
+                validate_manifest({**self.manifest, "layers": layers})
+
     def test_unknown_format_is_rejected(self):
         self.manifest["format_version"] = 99
         with self.assertRaisesRegex(BundleError, "Unsupported model format"):

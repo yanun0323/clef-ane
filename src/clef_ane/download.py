@@ -12,13 +12,15 @@ from . import paths
 from .bundle import MANIFEST, BundleError, load_bundle, read_json, safe_path, validate_manifest
 
 
-def download_model(model_dir: Path, repo_id: str | None = None, revision: str = "main", *, force: bool = False) -> Path:
+def download_model(model_dir: Path, repo_id: str | None = None, revision: str = "main", *, force: bool = False,
+                   default_repo: str | None = None) -> Path:
+    """default_repo is the published bundle of the model chosen with --model; without it, the default model's."""
     model_dir = model_dir.expanduser().resolve()
     saved = model_dir / ".source.json"
     repo_id = repo_id or os.environ.get("CLEF_ANE_REPO")
     if not repo_id and saved.is_file():
         repo_id = read_json(saved).get("repo_id")
-    repo_id = repo_id or paths.DEFAULT_REPO_ID
+    repo_id = repo_id or default_repo or paths.DEFAULT_REPO_ID
     if not repo_id:
         raise BundleError("The public model repository has not been configured yet. Use --repo OWNER/clef-flash-ane-lut6.")
     model_dir.mkdir(parents=True, exist_ok=True)

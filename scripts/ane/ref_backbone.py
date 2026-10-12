@@ -19,23 +19,64 @@ else:
     import joint_schema_model as clef  # Cloudflare's own record encoder and head
 
 
-def load_text_model(device: str = "mps", dtype: torch.dtype = torch.bfloat16, attention: str = "eager") -> Qwen3_5TextModel:
+class _LayerByLayer:
+    """Stands in for the model's layer list: each decoder layer is read from disk, run, and dropped again.
+
+    A 27B checkpoint (about 50 GiB in bf16) does not fit in this Mac's memory at once; one layer at a time does.
+    The model's own forward still drives the layers, so the arithmetic is the upstream code's.
+    """
+
+    def __init__(self, config, weights: Path, device: str) -> None:
+        self.config, self.weights, self.device = config, weights, device
+
+    def __len__(self) -> int:
+        return len(self.config.layer_types)
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return [self[i] for i in range(*key.indices(len(self)))]
+        return lambda hidden_states, **kwargs: self._run(key, hidden_states, **kwargs)
+
+    def _run(self, index: int, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DecoderLayer
+
+        with torch.device("meta"):
+            layer = Qwen3_5DecoderLayer(self.config, index)
+        prefix = f"model.language_model.layers.{index}."
+        state = {k[len(prefix):]: v for k, v in load_file(self.weights / f"layer_{index:02d}.safetensors").items()}
+        layer.load_state_dict(state, strict=True, assign=True)
+        return layer.to(self.device).eval()(hidden_states, **kwargs)
+
+
+def load_text_model(device: str = "mps", dtype: torch.dtype = torch.bfloat16, attention: str = "eager",
+                    data: Path | None = None, layerwise: bool = False) -> Qwen3_5TextModel:
+    """data: the model's research data directory (default: Clef-Flash's). layerwise: see _LayerByLayer."""
     from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextModel
 
-    config = Qwen3_5TextConfig(**json.loads((ROOT / "data" / "config.json").read_text())["text_config"])
+    data = data or ROOT / "data"
+    weights = data / "weights"
+    config = Qwen3_5TextConfig(**json.loads((data / "config.json").read_text())["text_config"])
     config._attn_implementation = attention
+    count = config.num_hidden_layers
+    if layerwise:
+        config.num_hidden_layers = 0          # build only the embedding table and the final norm
     torch.set_default_dtype(dtype)
     model = Qwen3_5TextModel(config)
     torch.set_default_dtype(torch.float32)
     state = {}
     for i in range(config.num_hidden_layers):
-        for k, v in load_file(WEIGHTS / f"layer_{i:02d}.safetensors").items():
+        for k, v in load_file(weights / f"layer_{i:02d}.safetensors").items():
             state[k.replace("model.language_model.", "")] = v
-    state["norm.weight"] = load_file(WEIGHTS / "norm.safetensors")["model.language_model.norm.weight"]
-    state["embed_tokens.weight"] = load_file(WEIGHTS / "embed.safetensors")["model.language_model.embed_tokens.weight"]
+    state["norm.weight"] = load_file(weights / "norm.safetensors")["model.language_model.norm.weight"]
+    state["embed_tokens.weight"] = load_file(weights / "embed.safetensors")["model.language_model.embed_tokens.weight"]
     model.load_state_dict(state, strict=True)
-    return model.to(device).eval()
+    model = model.to(device).eval()
+    if layerwise:
+        config.num_hidden_layers = count
+        del model.layers
+        model.layers = _LayerByLayer(config, weights, device)
+    return model
 
 
 class _Rows:

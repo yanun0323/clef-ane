@@ -159,7 +159,7 @@ def image_positions(input_ids, grid_thw, image_token_id: int, merge_size: int = 
 def image_processor_settings(settings: dict) -> dict:
     """Accept the pinned preprocessing recipe, but never configuration that bypasses the pixel cap."""
     if not isinstance(settings, dict):
-        raise BundleError("Invalid image processor settings. Use the pinned Clef-Flash processor_config.json.")
+        raise BundleError("Invalid image processor settings. Use the processor_config.json pinned with the model.")
     image = settings.get("image_processor")
     expected = {"image_processor_type": "Qwen2VLImageProcessor", "do_convert_rgb": True, "do_normalize": True,
                 "do_rescale": True, "do_resize": True, "image_mean": [0.5, 0.5, 0.5], "image_std": [0.5, 0.5, 0.5],
@@ -167,7 +167,7 @@ def image_processor_settings(settings: dict) -> dict:
     if (settings.get("processor_class") != "Qwen3VLProcessor" or not isinstance(image, dict)
             or any(image.get(key) != value for key, value in expected.items())
             or set(image) - set(expected) - {"size"}):
-        raise BundleError("Invalid image processor settings. Use the pinned Clef-Flash processor_config.json.")
+        raise BundleError("Invalid image processor settings. Use the processor_config.json pinned with the model.")
     return {**expected, "size": {"shortest_edge": 256 * 256, "longest_edge": MAX_PROCESSED_PIXELS}}
 
 

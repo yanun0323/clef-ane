@@ -55,8 +55,7 @@ class Layer(LayerState):
             self.mixer = Kernel(layers.gdn_mixer(w, rows=rows))
         else:
             self.mixers = {c: Kernel(layers.full_attention(w, rows=rows, ctx=c)) for c in buckets}
-            self.master_k = np.zeros((1, layers.KV_HEADS, buckets[-1], layers.ATT_DIM), np.float16)
-            self.master_v = np.zeros_like(self.master_k)
+            self.allocate_cache()
         self.reset()
 
 

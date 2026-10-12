@@ -5,9 +5,11 @@ import os
 import sys
 from pathlib import Path
 
-# Public LUT-6 bundle. --repo and CLEF_ANE_REPO can override it;
+from .models import DEFAULT_MODEL, MODELS
+
+# Public LUT-6 bundle of the default model. --model, --repo and CLEF_ANE_REPO can override it;
 # download also remembers an explicitly selected repository.
-DEFAULT_REPO_ID: str | None = "Yanun/clef-flash-ane-lut6"
+DEFAULT_REPO_ID: str | None = MODELS[DEFAULT_MODEL].repo_id
 
 
 def home() -> Path:
@@ -17,5 +19,5 @@ def home() -> Path:
     return base / "clef-ane"
 
 
-def model_dir() -> Path:
-    return home() / "models" / "clef-flash-ane-lut6"
+def model_dir(model: str = DEFAULT_MODEL) -> Path:
+    return home() / "models" / MODELS[model].directory

@@ -2,6 +2,7 @@
 
 Requires the original text/vision research weights, an image-capable exported bundle, and an
 Apple Silicon Mac. Uses generated test images; no network, external image files, or API keys.
+The bundle says which model it is; Clef's reference runs one layer at a time because it does not fit in memory.
 This is a regression check, not a general vision-quality benchmark.
 """
 from __future__ import annotations
@@ -26,8 +27,9 @@ from PIL import Image, ImageDraw, ImageFont
 from clef_ane.bundle import load_bundle
 from clef_ane.engine.ref_backbone import Head, clef, load_text_model
 from clef_ane.engine.service import Service
+from clef_ane.models import DEFAULT_MODEL, MODELS, data_dir
 from clef_ane.native import build_bridge, require_apple_silicon
-from clef_ane.server import create_server
+from clef_ane.server import create_server, model_name
 from clef_ane.vision import Vision, decode_images
 from clef_ane.video import decode_videos
 
@@ -87,7 +89,10 @@ def verify(model_dir: Path, output: Path, device: str, *, records=None, max_toke
     output.parent.mkdir(parents=True, exist_ok=True)
     output.with_suffix(".requests.json").write_text(json.dumps(records, indent=2) + "\n")
     print("Loading the original BF16 multimodal reference...", flush=True)
-    text = load_text_model(device="mps", attention="eager")
+    model = model_name(manifest)
+    known_reference_errors = (known_reference_errors or {}).get(model, {})   # keyed by model name
+    text = load_text_model(device="mps", attention="eager", data=data_dir(Path(__file__).resolve().parents[1], MODELS[model]),
+                           layerwise=model != DEFAULT_MODEL)
     vision._load()
     # Construct the upstream wrapper without allocating a second 9B model. Its forward,
     # visual scatter, and position calculation remain the original Transformers code.
@@ -123,9 +128,9 @@ def verify(model_dir: Path, output: Path, device: str, *, records=None, max_toke
     os.environ["CLEF_ANE_BRIDGE"] = str(build_bridge())
     from clef_ane.model import BundleBackbone
     backbone = BundleBackbone(model_dir, manifest, max_tokens=max_tokens)
-    service = Service(backbone, head, vision=vision)
-    summary = {"vision_device": vision.device, "preprocessing": "Pillow; sampled video PTS; no audio",
-               "max_tokens": max_tokens, "known_reference_errors": known_reference_errors or {}, "records": [], "http": {}}
+    service = Service(backbone, head, model, vision=vision)
+    summary = {"model": model, "vision_device": vision.device, "preprocessing": "Pillow; sampled video PTS; no audio",
+               "max_tokens": max_tokens, "known_reference_errors": known_reference_errors, "records": [], "http": {}}
     latest = {}
     original_probabilities = head.probabilities
     def capture(hidden, encoded):
@@ -200,7 +205,7 @@ def verify(model_dir: Path, output: Path, device: str, *, records=None, max_toke
             total += 1
             if answer == row["semantic_expected"][key]:
                 correct += 1
-            elif answer != (known_reference_errors or {}).get(row["name"], {}).get(key):
+            elif answer != known_reference_errors.get(row["name"], {}).get(key):
                 unexpected.setdefault(row["name"], {})[key] = answer
     assert not unexpected, f"Unexpected synthetic-answer errors: {unexpected}; see {output}"
     print(f"BF16 option agreement: {total}/{total}; synthetic expected answers: {correct}/{total}.", flush=True)

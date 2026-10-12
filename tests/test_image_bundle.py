@@ -33,7 +33,9 @@ class ImageExportTests(unittest.TestCase):
         (self.source / "data/weights").mkdir(parents=True)
         for path in (self.source / "data/config.json", self.base / "config.json"):
             path.write_text(json.dumps(config))
-        self.manifest["files"]["config.json"] = {"size": (self.base / "config.json").stat().st_size, "sha256": sha256(self.base / "config.json")}
+        (self.base / "weights/joint_head_config.json").write_text(json.dumps({"layers": 4, "width": 1024, "heads": 16, "routing_layers": 2}))
+        for name in ("config.json", "weights/joint_head_config.json"):
+            self.manifest["files"][name] = {"size": (self.base / name).stat().st_size, "sha256": sha256(self.base / name)}
         write_manifest(self.base, self.manifest)
         (self.source / "data/processor_config.json").write_text(json.dumps(processor_config()))
         (self.source / "data/weights/vision.safetensors").write_bytes(b"vision fixture\n")
@@ -96,6 +98,31 @@ class ImageExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "empty"):
             exporter.export(self.source, self.output, with_images=True, text_bundle=self.base)
         self.assertEqual(marker.read_bytes(), b"keep")
+
+
+class ModelCardTests(unittest.TestCase):
+    files = {"programs/00/mlp.bin": {"size": 2**30}, "weights/vision.safetensors": {"size": 2**29}}
+
+    def test_clef_card_describes_its_own_shapes_and_source(self):
+        clef = exporter.MODELS["clef"]
+        config = {"text_config": {"layer_types": (["linear_attention"] * 3 + ["full_attention"]) * 16, "hidden_size": 5120,
+                                  "intermediate_size": 17408, "linear_num_value_heads": 48, "num_attention_heads": 24}}
+        card = exporter.model_card(self.files, True, clef, config)
+        for text in ("base_model: Cloudflare/clef\n", "# Clef-ANE-LUT6", "64 layers; hidden size 5,120; MLP intermediate size 17,408",
+                     "48 Gated DeltaNet linear-attention layers (16 key and 48 value heads", "16 full-attention layers (24 query and 4",
+                     "5,120-wide text embedding space", "Text backbone (64 layers)", "**6.01 bits per weight**",
+                     f"`{clef.source_revision}`", "post-trained from **Qwen3.8-27B**"):
+            self.assertIn(text, card)
+        # Clef-Flash's shapes, source and measurements must not leak into the larger model's card.
+        for text in ("Cloudflare/clef-flash", "Qwen3.5-9B", "hidden size 4,096", "4,096-wide", "text-v1", "0.065", "12,400"):
+            self.assertNotIn(text, card)
+
+    def test_a_model_without_recorded_measurements_claims_none(self):
+        other = exporter.ModelInfo("clef-next", "Clef-Next", "Qwen", "owner/clef-next-ane-lut6", "Cloudflare/clef-next", "a" * 40)
+        card = exporter.model_card(self.files, True, other)
+        self.assertIn("No accuracy measurements have been recorded", card)
+        self.assertNotIn("27 of 27", card)
+        self.assertNotIn("### Vision weights", card)
 
 
 class RangeDownloadTests(unittest.TestCase):

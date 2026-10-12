@@ -4,13 +4,11 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import numpy as np
 from safetensors.torch import load_file
 
 from .bundle import BUCKETS, BundleError, read_json
-from .engine import layers
 from .engine.ane import Kernel
-from .engine.runtime import BackboneRunner, LayerState
+from .engine.runtime import BackboneRunner, BlockState, LayerState
 from .program import StoredProgram
 
 
@@ -20,15 +18,16 @@ class BundleLayer(LayerState):
         spec = manifest["layers"][index]
         self.kind = spec["kind"]
         self.mixers = {}
+        self.mlp = None
         try:
-            self.mlp = Kernel(StoredProgram(root, spec["mlp"], manifest))
+            if "mlp" in spec:
+                self.mlp = Kernel(StoredProgram(root, spec["mlp"], manifest))
             if self.kind == "linear_attention":
                 self.mixer = Kernel(StoredProgram(root, spec["mixer"], manifest))
             else:
                 for size in buckets:
                     self.mixers[size] = Kernel(StoredProgram(root, spec["mixers"][str(size)], manifest))
-                self.master_k = np.zeros((1, layers.KV_HEADS, buckets[-1], layers.ATT_DIM), np.float16)
-                self.master_v = np.zeros_like(self.master_k)
+                self.allocate_cache()
             self.reset()
         except BaseException:
             self.close()
@@ -43,15 +42,32 @@ class BundleBackbone(BackboneRunner):
         self.buckets = tuple(n for n in manifest["buckets"] if n <= max_tokens)
         self.max_tokens = max_tokens
         self.config = read_json(root / "config.json")["text_config"]
-        if self.config["hidden_size"] != layers.HIDDEN or self.config["layer_types"] != [v["kind"] for v in manifest["layers"]]:
+        if self.config["layer_types"] != [v["kind"] for v in manifest["layers"]]:
             raise BundleError("Model configuration does not match the exported ANE programs.")
-        self.layers = []
+        self.layers = []    # one entry per program group: a layer, or a block of consecutive layers
         started = time.monotonic()
+        specs = manifest["layers"]
+        index, count = 0, len(specs)
         try:
-            for index in range(len(manifest["layers"])):
-                self.layers.append(BundleLayer(root, manifest, index, self.buckets))
-                if verbose and index % 8 == 7:
-                    print(f"Loaded {index + 1}/32 layers on the ANE ({time.monotonic() - started:.0f}s)", flush=True)
+            while index < count:
+                block = specs[index].get("block")
+                if block:
+                    size = next((n for n in range(1, count - index) if specs[index + n].get("block") != block), count - index)
+                    layer = BlockState(Kernel(StoredProgram(root, block, manifest)))
+                    self.layers.append(layer)
+                    first = layer.kernel.inputs[0]
+                    if len(layer.state) != 2 * size:
+                        raise BundleError("Model manifest does not match the exported ANE programs.")
+                else:
+                    size = 1
+                    layer = BundleLayer(root, manifest, index, self.buckets)
+                    self.layers.append(layer)
+                    first = (layer.mixer if layer.kind == "linear_attention" else layer.mixers[self.buckets[0]]).inputs[0]
+                if first.shape != (1, self.config["hidden_size"], 1, self.rows):
+                    raise BundleError("Model configuration does not match the exported ANE programs.")
+                index += size
+                if verbose and index // 8 > (index - size) // 8:
+                    print(f"Loaded {index}/{count} layers on the ANE ({time.monotonic() - started:.0f}s)", flush=True)
             self.embed = load_file(root / "weights" / "embed.safetensors")["model.language_model.embed_tokens.weight"]
             self.norm_w = load_file(root / "weights" / "norm.safetensors")["model.language_model.norm.weight"].float().numpy()
             self.trace = []

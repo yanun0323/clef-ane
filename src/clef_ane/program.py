@@ -68,3 +68,8 @@ class StoredProgram:
     @property
     def weights(self) -> dict[str, bytes]:
         return {WEIGHT_PATH: self._weight_file.read_bytes()}
+
+    @property
+    def weight_files(self) -> dict[str, Path]:
+        """Where the packed weights are on disk, so loading can map and clone the file instead of reading it."""
+        return {WEIGHT_PATH: self._weight_file}

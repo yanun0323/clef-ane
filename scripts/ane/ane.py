@@ -19,8 +19,9 @@ _SIZE = ctypes.c_size_t
 _LIB.ane_init.argtypes = []
 _LIB.ane_init.restype = ctypes.c_int
 _LIB.ane_compile.argtypes = [ctypes.c_char_p, _SIZE, ctypes.c_int, ctypes.POINTER(ctypes.c_char_p),
-                             ctypes.POINTER(_PTR), ctypes.POINTER(_SIZE), ctypes.c_int, ctypes.POINTER(_SIZE),
-                             ctypes.c_int, ctypes.POINTER(_SIZE), ctypes.c_char_p, _SIZE]
+                             ctypes.POINTER(_PTR), ctypes.POINTER(_SIZE), ctypes.POINTER(ctypes.c_char_p),
+                             ctypes.c_int, ctypes.POINTER(_SIZE), ctypes.c_int, ctypes.POINTER(_SIZE),
+                             ctypes.c_char_p, _SIZE]
 _LIB.ane_compile.restype = _PTR
 _LIB.ane_write_input.argtypes = [_PTR, ctypes.c_int, _PTR, _SIZE]
 _LIB.ane_write_input.restype = ctypes.c_int
@@ -60,21 +61,28 @@ class Kernel:
         # The ANE numbers its I/O buffers by tensor name in alphabetical order, not in declaration order.
         self._in_slot = {t.name: i for i, t in enumerate(sorted(self.inputs, key=lambda t: t.name))}
         self._out_slot = {t.name: i for i, t in enumerate(sorted(self.outputs, key=lambda t: t.name))}
-        weights = list(graph.weights.items())
+        # A stored program names its weight files; the bridge maps and clones them instead of copying the bytes.
+        files = getattr(graph, "weight_files", None)
+        weights = [(n, b"") for n in files] if files else list(graph.weights.items())
         names = (ctypes.c_char_p * len(weights))(*[n.encode() for n, _ in weights])
         keep = [ctypes.create_string_buffer(b, len(b)) for _, b in weights]
         datas = (ctypes.c_void_p * len(weights))(*[ctypes.addressof(b) for b in keep])
         lens = (ctypes.c_size_t * len(weights))(*[len(b) for _, b in weights])
+        paths = (ctypes.c_char_p * len(weights))(*[os.fsencode(files[n]) if files else None for n, _ in weights])
         in_bytes = (ctypes.c_size_t * len(self.inputs))(*[_bytes(t) for t in sorted(self.inputs, key=lambda t: t.name)])
         out_bytes = (ctypes.c_size_t * len(self.outputs))(*[_bytes(t) for t in sorted(self.outputs, key=lambda t: t.name)])
         mil = graph.text().encode()
         err = ctypes.create_string_buffer(4096)
         start = time.perf_counter()
-        self._handle = _LIB.ane_compile(mil, len(mil), len(weights), names, datas, lens, len(self.inputs), in_bytes,
+        self._handle = _LIB.ane_compile(mil, len(mil), len(weights), names, datas, lens, paths, len(self.inputs), in_bytes,
                                         len(self.outputs), out_bytes, err, len(err))
         self.compile_seconds = time.perf_counter() - start
         if not self._handle:
-            raise CompileError(err.value.decode())
+            message = err.value.decode()
+            if "no ANE resources" in message:
+                message = ("The Neural Engine is full: macOS keeps at most 127 programs loaded, counted over every app. "
+                           "Stop other programs that use it, or start serve with a smaller --max-tokens.")
+            raise CompileError(message)
 
     def write_region(self, name: str, offset_elems: int, array: np.ndarray) -> None:
         """Overwrite part of input `name` in place. offset_elems counts fp16/fp32 elements from the start of the buffer.

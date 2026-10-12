@@ -10,19 +10,54 @@ else:
     import layers
 
 
+class BlockState:
+    """Several consecutive layers compiled as one program (layers.linear_block), with every layer's recurrent state.
+
+    The program's inputs are the hidden states followed by the state tensors, and its outputs come in the same order.
+    """
+
+    def __init__(self, kernel) -> None:
+        self.kernel = kernel
+        self.reset()
+
+    def reset(self) -> None:
+        self.state = [np.zeros(t.shape, np.float16) for t in self.kernel.inputs[1:]]
+
+    def __call__(self, h: np.ndarray, start: int, position_embeddings=None) -> np.ndarray:
+        h, *self.state = self.kernel(h, *self.state)
+        return h
+
+    def close(self) -> None:
+        self.kernel.close()
+
+
 class LayerState:
-    """State management for a mixer + MLP pair, independent of how the programs are loaded."""
+    """State management for a mixer + MLP pair, independent of how the programs are loaded.
+
+    State sizes come from the programs' own inputs, so Clef-Flash and Clef share this code.
+    A full-attention layer whose MLP was compiled into the next block has mlp = None.
+    """
+
+    def _shape(self, kernel, name: str) -> tuple[int, ...]:
+        return next(t.shape for t in kernel.inputs if t.name == name)
+
+    def allocate_cache(self) -> None:
+        """Host copy of a full-attention layer's keys and values, as long as the largest context program."""
+        _, kv_heads, _, width = self._shape(self.mixers[self.buckets[-1]], "k_cache")
+        self.master_k = np.zeros((1, kv_heads, self.buckets[-1], width), np.float16)
+        self.master_v = np.zeros_like(self.master_k)
 
     def reset(self) -> None:
         self.active = None
         if self.kind == "linear_attention":
-            self.conv = np.zeros((1, layers.CONV_DIM, 1, 3), np.float16)
-            self.rec = np.zeros((1, layers.VALUE_HEADS, layers.HEAD_DIM, layers.HEAD_DIM), np.float16)
+            self.conv = np.zeros(self._shape(self.mixer, "conv_in"), np.float16)
+            self.rec = np.zeros(self._shape(self.mixer, "rec_in"), np.float16)
 
     def _write_cache(self, bucket: int, start: int, stop: int) -> None:
         kernel = self.mixers[bucket]
-        for head in range(layers.KV_HEADS):
-            offset = (head * bucket + start) * layers.ATT_DIM
+        _, kv_heads, _, width = self.master_k.shape
+        for head in range(kv_heads):
+            offset = (head * bucket + start) * width
             kernel.write_region("k_cache", offset, self.master_k[0, head, start:stop])
             kernel.write_region("v_cache", offset, self.master_v[0, head, start:stop])
 
@@ -40,7 +75,7 @@ class LayerState:
             h, k, v = self.mixers[bucket](h, None, None, cos, sin, layers.cache_mask(start, bucket))
             self.master_k[:, :, start:stop], self.master_v[:, :, start:stop] = k, v
             self._write_cache(bucket, start, stop)
-        return self.mlp(h)[0]
+        return h if self.mlp is None else self.mlp(h)[0]
 
     def close(self) -> None:
         kernels = [getattr(self, "mlp", None), getattr(self, "mixer", None), *getattr(self, "mixers", {}).values()]

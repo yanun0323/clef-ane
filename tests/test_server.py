@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from clef_ane.bundle import BundleError
 from clef_ane.engine.errors import RequestError, TooLong
-from clef_ane.server import create_server, serve, termination_signals
+from clef_ane.server import create_server, model_name, serve, termination_signals
 
 
 class StubService:
@@ -142,6 +142,13 @@ class HTTPTests(unittest.TestCase):
 
     def test_shutdown_waits_for_request_threads(self):
         self.assertFalse(self.server.daemon_threads)
+
+    def test_reported_name_follows_the_model_the_bundle_was_converted_from(self):
+        for source, name in (({"repo_id": "Cloudflare/clef", "revision": "a" * 40}, "clef"),
+                             ({"repo_id": "Cloudflare/clef-flash", "revision": "a" * 40}, "clef-flash"),
+                             ({"repo_id": "someone/else"}, "clef-flash"), (None, "clef-flash"), ("text", "clef-flash")):
+            with self.subTest(source=source):
+                self.assertEqual(model_name({"source": source}), name)
 
     def test_missing_model_fails_without_native_build_or_download(self):
         with tempfile.TemporaryDirectory() as root, patch("clef_ane.server.require_apple_silicon"), \

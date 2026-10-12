@@ -71,6 +71,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=Path(".tmp/video-support/verification.json"))
     parser.add_argument("--vision-device", choices=("ane", "mps", "cpu"), default="ane")
     args = parser.parse_args()
-    # Keep this observed source-model mistake visible; do not relabel green as the correct video color.
+    # Keep this observed Clef-Flash mistake visible; do not relabel green as the correct video color. Clef does not make it.
     verify(args.model_dir.expanduser().resolve(), args.output, args.vision_device, records=fixtures(), max_tokens=2048,
-           known_reference_errors={"mixed_image_video": {"start": "green"}})
+           known_reference_errors={"clef-flash": {"mixed_image_video": {"start": "green"}}})

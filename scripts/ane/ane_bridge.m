@@ -5,6 +5,7 @@
 #import <IOSurface/IOSurface.h>
 #import <dlfcn.h>
 #import <objc/message.h>
+#import <sys/clonefile.h>
 
 #define QOS 21
 #define MSG(ret, ...) ((ret(*)(__VA_ARGS__))objc_msgSend)
@@ -41,10 +42,18 @@ static IOSurfaceRef makeSurface(size_t bytes) {
 
 void ane_free(void *handle);
 
+// Copy-on-write copy where the volume supports it (APFS), so the copy takes no extra disk space; else a plain copy.
+static BOOL cloneFile(NSString *from, NSString *to) {
+  if (clonefile(from.fileSystemRepresentation, to.fileSystemRepresentation, 0) == 0) return YES;
+  return [NSFileManager.defaultManager copyItemAtPath:from toPath:to error:nil];
+}
+
 // Weights are passed as parallel arrays; names look like "@model_path/weights/foo.bin".
+// A weight is given either in memory (datas[i], lens[i]) or, when paths[i] is set, as a file that is mapped rather
+// than read, so a multi-gigabyte model is never copied into this process.
 void *ane_compile(const char *mil, size_t milLen, int nWeights, const char **names, const uint8_t **datas,
-                  const size_t *lens, int nIn, const size_t *inBytes, int nOut, const size_t *outBytes,
-                  char *err, size_t errLen) {
+                  const size_t *lens, const char **paths, int nIn, const size_t *inBytes, int nOut,
+                  const size_t *outBytes, char *err, size_t errLen) {
   @autoreleasepool {
     if (nIn < 1 || nIn > 16 || nOut < 1 || nOut > 16 || nWeights < 0 || nWeights > 64) {
       setError(err, errLen, @"invalid ANE buffer count"); return NULL;
@@ -59,8 +68,15 @@ void *ane_compile(const char *mil, size_t milLen, int nWeights, const char **nam
     if (ane_init() != 0) { setError(err, errLen, @"private ANE classes unavailable"); return NULL; }
     NSData *milData = [NSData dataWithBytes:mil length:milLen];
     NSMutableDictionary *weights = [NSMutableDictionary dictionary];
-    for (int i = 0; i < nWeights; i++)
-      weights[@(names[i])] = @{@"offset": @0, @"data": [NSData dataWithBytes:datas[i] length:lens[i]]};
+    NSMutableArray *blobs = [NSMutableArray array];
+    for (int i = 0; i < nWeights; i++) {
+      NSData *blob = (paths && paths[i])
+        ? [NSData dataWithContentsOfFile:@(paths[i]) options:NSDataReadingMappedIfSafe error:nil]
+        : [NSData dataWithBytes:datas[i] length:lens[i]];
+      if (!blob) { setError(err, errLen, @"could not read a weight file"); return NULL; }
+      [blobs addObject:blob];
+      weights[@(names[i])] = @{@"offset": @0, @"data": blob};
+    }
 
     id desc = MSG(id, id, SEL, id, id, id)(gDesc, NSSelectorFromString(@"modelWithMILText:weights:optionsPlist:"),
                                            milData, weights, nil);
@@ -78,7 +94,8 @@ void *ane_compile(const char *mil, size_t milLen, int nWeights, const char **nam
       if ([rel hasPrefix:@"@model_path/"]) rel = [rel substringFromIndex:12];
       NSString *path = [dir stringByAppendingPathComponent:rel];
       [fm createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-      [[NSData dataWithBytes:datas[i] length:lens[i]] writeToFile:path atomically:YES];
+      [fm removeItemAtPath:path error:nil];
+      if (!(paths && paths[i] && cloneFile(@(paths[i]), path))) [blobs[i] writeToFile:path atomically:YES];
     }
 
     NSError *e = nil;
@@ -86,6 +103,20 @@ void *ane_compile(const char *mil, size_t milLen, int nWeights, const char **nam
     if (!ok) { setError(err, errLen, [@"compile: " stringByAppendingString:e.description ?: @"unknown"]); [fm removeItemAtPath:dir error:nil]; return NULL; }
     ok = MSG(BOOL, id, SEL, unsigned, id, NSError **)(model, NSSelectorFromString(@"loadWithQoS:options:error:"), QOS, @{}, &e);
     if (!ok) { setError(err, errLen, [@"load: " stringByAppendingString:e.description ?: @"unknown"]); [fm removeItemAtPath:dir error:nil]; return NULL; }
+
+    // The compiler leaves a second full copy of the weights in `data`. Swap it for a copy-on-write clone of the
+    // first: a loaded program keeps the same files, but they no longer take disk space twice.
+    if (nWeights == 1) {
+      NSString *rel = @(names[0]);
+      if ([rel hasPrefix:@"@model_path/"]) rel = [rel substringFromIndex:12];
+      NSString *source = [dir stringByAppendingPathComponent:rel], *copy = [dir stringByAppendingPathComponent:@"data"];
+      NSString *staged = [copy stringByAppendingString:@".clone"];
+      NSData *a = [NSData dataWithContentsOfFile:source options:NSDataReadingMappedIfSafe error:nil];
+      NSData *b = [NSData dataWithContentsOfFile:copy options:NSDataReadingMappedIfSafe error:nil];
+      if (a && b && [a isEqualToData:b] && clonefile(source.fileSystemRepresentation, staged.fileSystemRepresentation, 0) == 0
+          && rename(staged.fileSystemRepresentation, copy.fileSystemRepresentation) != 0)
+        [fm removeItemAtPath:staged error:nil];
+    }
 
     Kernel *k = calloc(1, sizeof(Kernel));
     k->model = [model retain]; k->dir = [dir retain]; k->nIn = nIn; k->nOut = nOut;

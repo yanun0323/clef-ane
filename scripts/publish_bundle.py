@@ -16,10 +16,11 @@ from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.errors import LocalTokenNotFoundError
 
 from clef_ane.bundle import MANIFEST, BundleError, load_bundle, read_json, safe_path
+from clef_ane.models import DEFAULT_MODEL, MODELS
 from clef_ane.paths import model_dir
 
 
-def publish(root: Path, name: str = "clef-flash-ane-lut6") -> tuple[str, str]:
+def publish(root: Path, name: str = MODELS[DEFAULT_MODEL].directory) -> tuple[str, str]:
     root = root.expanduser().resolve()
     executable = shutil.which("hf")
     if not executable:
@@ -48,9 +49,10 @@ def publish(root: Path, name: str = "clef-flash-ane-lut6") -> tuple[str, str]:
             old = read_json(Path(hf_hub_download(repo_id, MANIFEST, revision=info.sha)))
             if old.get("format") != "clef-ane" or old.get("source") != manifest.get("source"):
                 raise RuntimeError(f"{repo_id} contains another model; refusing to overwrite it.")
-        card.write_text(card.read_text().replace("OWNER/clef-flash-ane-lut6", repo_id))
+        card.write_text(card.read_text().replace(f"OWNER/{name}", repo_id))
+        title = next((model.title for model in MODELS.values() if model.source_repo == manifest.get("source", {}).get("repo_id")), "Clef")
         command = [executable, "upload", repo_id, str(root), ".", "--no-private",
-                   "--commit-message", "Publish Clef-Flash ANE LUT-6 bundle"]
+                   "--commit-message", f"Publish {title} ANE LUT-6 bundle"]
         for filename in [MANIFEST, "README.md", *manifest["files"]]:
             command.extend(["--include", filename])
         print(f"Publishing PUBLIC model {repo_id} ({len(manifest['files'])} runtime files)", flush=True)
@@ -70,12 +72,13 @@ def publish(root: Path, name: str = "clef-flash-ane-lut6") -> tuple[str, str]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model-dir", type=Path, default=model_dir())
-    parser.add_argument("--name", default="clef-flash-ane-lut6")
+    parser.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL, help="sets the default --model-dir and --name")
+    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--name", help="repository name without an owner (default: MODEL-ane-lut6)")
     args = parser.parse_args()
     try:
-        repo, revision = publish(args.model_dir, args.name)
+        repo, revision = publish(args.model_dir or model_dir(args.model), args.name or MODELS[args.model].directory)
     except Exception as error:
         parser.exit(1, f"publish: {error}\n")
     print(f"Published {repo} at {revision}")
-    print("Before sharing a wheel, set DEFAULT_REPO_ID in src/clef_ane/paths.py to this repository and rebuild it.")
+    print("Before sharing a wheel, check that this repository is the model's repo_id in src/clef_ane/models.py and rebuild it.")

@@ -17,6 +17,7 @@ from filelock import FileLock
 
 from .bundle import IMAGE_FORMAT_VERSION, load_bundle
 from .engine.errors import RequestError, TooLong
+from .models import DEFAULT_MODEL, MODELS
 from .native import build_bridge, require_apple_silicon
 
 
@@ -117,7 +118,7 @@ def load_service(root: Path, manifest: dict, max_tokens: int, name: str, vision_
     try:
         head = Head(model_dir=root)
         vision = None
-        if manifest["format_version"] == IMAGE_FORMAT_VERSION:
+        if manifest["format_version"] >= IMAGE_FORMAT_VERSION:
             from .vision import Vision
             vision = Vision(root, head.tokenizer, device=vision_device)
         service = Service(backbone, head, name, vision=vision)
@@ -144,8 +145,15 @@ def termination_signals():
             signal.signal(sig, handler)
 
 
+def model_name(manifest: dict) -> str:
+    """The name of the model a bundle was converted from, so a Clef bundle reports `clef` wherever it is stored."""
+    source = manifest.get("source")
+    repo = source.get("repo_id") if isinstance(source, dict) else None
+    return next((model.name for model in MODELS.values() if model.source_repo == repo), DEFAULT_MODEL)
+
+
 def serve(model_dir: Path, *, host: str = "127.0.0.1", port: int = 8080, max_tokens: int = 16384,
-          name: str = "clef-flash", max_body_mb: int = 32, vision_device: str = "ane") -> None:
+          name: str | None = None, max_body_mb: int = 32, vision_device: str = "ane") -> None:
     require_apple_silicon()
     root = model_dir.expanduser().resolve()
     if not root.is_dir():
@@ -159,9 +167,9 @@ def serve(model_dir: Path, *, host: str = "127.0.0.1", port: int = 8080, max_tok
                 print("Warning: this server has no authentication. Only expose it on a trusted network.", file=sys.stderr)
             os.environ["CLEF_ANE_BRIDGE"] = str(build_bridge())
             started = time.monotonic()
-            service = load_service(root, manifest, max_tokens, name, vision_device)
+            service = load_service(root, manifest, max_tokens, name or model_name(manifest), vision_device)
             server.service = service
-            print(f"Ready in {time.monotonic() - started:.0f}s; LUT-6; up to {max_tokens} input tokens", flush=True)
+            print(f"Ready in {time.monotonic() - started:.0f}s; {service.name}; LUT-6; up to {max_tokens} input tokens", flush=True)
             if service.vision is not None:
                 media = "Images and video" if service.vision.supports_video else "Images"
                 print(f"{media} enabled: {service.vision.device.upper()} encoder loads on the first media request", flush=True)

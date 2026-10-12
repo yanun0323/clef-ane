@@ -66,6 +66,13 @@ class DownloadTests(unittest.TestCase):
             download_model(self.local, "owner/other")
         self.assertEqual(self.snapshot.call_args.args[0], "owner/other")
 
+    def test_selected_model_repository_is_used_unless_one_is_named(self):
+        with patch("clef_ane.paths.DEFAULT_REPO_ID", "owner/release"):
+            download_model(self.local, default_repo="owner/larger")
+            self.assertEqual(self.snapshot.call_args.args[0], "owner/larger")
+            download_model(self.local, "owner/other", default_repo="owner/larger")
+        self.assertEqual(self.snapshot.call_args.args[0], "owner/other")
+
     def test_second_download_remembers_the_explicit_repository(self):
         download_model(self.local, "owner/model")
         with patch("clef_ane.paths.DEFAULT_REPO_ID", "someone/default"):

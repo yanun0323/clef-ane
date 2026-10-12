@@ -111,7 +111,7 @@ def video_processor_settings(settings: dict) -> None:
                 "return_metadata": False}
     if (not isinstance(video, dict) or any(video.get(key) != value for key, value in expected.items())
             or set(video) - set(expected) - {"size"}):
-        raise BundleError("Invalid video processor settings. Use the pinned Clef-Flash processor_config.json.")
+        raise BundleError("Invalid video processor settings. Use the processor_config.json pinned with the model.")
 
 
 class VideoProcessor:

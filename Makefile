@@ -10,6 +10,8 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 
 HOST ?= 127.0.0.1
 PORT ?= 8080
+# Maintainer targets work on Clef-Flash unless told otherwise: `make fetch MODEL=clef`
+MODEL ?= clef-flash
 PY := .venv/bin/python -I
 CLI := .venv/bin/clef-ane
 HF := https://huggingface.co/Cloudflare/clef-flash/resolve/main
@@ -36,7 +38,7 @@ run:
 	@test -x $(CLI) || { echo "CLI not installed: run make install"; exit 1; }
 	$(CLI) serve --host $(HOST) --port $(PORT) $(ARGS)
 
-## download: download and verify the published LUT-6 model (pass --repo or other options after --)
+## download: download and verify a published LUT-6 model (pass --model clef, --repo or other options after --)
 download:
 	@test -x $(CLI) || { echo "CLI not installed: run make install"; exit 1; }
 	$(CLI) download $(ARGS)
@@ -57,20 +59,23 @@ test:
 test-model: build
 	$(PY) scripts/ane/test_service.py
 
-## fetch: download original research weights (about 17 GB); not needed by clef-ane serve
+## fetch: download original research weights (about 17 GB; 51 GiB with MODEL=clef); not needed by clef-ane serve
 fetch:
-	@mkdir -p data hf-meta
-	@for f in config.json tokenizer.json tokenizer_config.json; do [ -f data/$$f ] || curl -fL $(HF)/$$f -o data/$$f; done
+	@mkdir -p hf-meta
 	@[ -f hf-meta/joint_schema_model.py ] || curl -fL $(HF)/joint_schema_model.py -o hf-meta/joint_schema_model.py
-	@for j in 0 1 2 3 4 5; do $(PY) scripts/fetch_all.py $$j 6 & done; wait
+	@for j in 0 1 2 3 4 5; do $(PY) scripts/fetch_all.py $$j 6 --model $(MODEL) & done; wait
 
 ## fetch-vision: download the pinned vision weights and settings (about 0.85 GiB; no text weights)
 fetch-vision:
-	$(PY) scripts/fetch_vision.py $(ARGS)
+	$(PY) scripts/fetch_vision.py --model $(MODEL) $(ARGS)
+
+## export: convert the research weights to a LUT-6 bundle with images and video (pass --output after --)
+export:
+	$(PY) scripts/export_bundle.py --model $(MODEL) --with-images $(ARGS)
 
 ## export-images: add image/video weights to a text bundle (pass --text-bundle and --output after --)
 export-images:
-	$(PY) scripts/export_bundle.py --with-images $(ARGS)
+	$(PY) scripts/export_bundle.py --model $(MODEL) --with-images $(ARGS)
 
 ## test-images: compare image decisions with BF16 and exercise HTTP (research weights; pass --model-dir after --)
 test-images: build
